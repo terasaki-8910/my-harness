@@ -4,7 +4,12 @@ Record every change to what loads each turn. Keep a component only if the fixed 
 
 | Date | Change | Always-on tokens (`plugin details`) | `/context` total | Fixed tasks (3 runs each) | `/usage` note | Keep? |
 | --- | --- | --- | --- | --- | --- | --- |
-| 2026-11-14 | core 0.1.0: guard hook, verifier agent | TBD | not measured | not measured | not measured | baseline |
+| 2026-11-14 | core 0.1.0: guard hook, verifier agent | ~44 (verifier ~40; ~440 each time it is called; hook 0) | not measured | not measured | not measured | baseline |
+
+## Evals
+| Date | Case | Model | Runs per arm | With plugin | Without | Δ | Cost |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-11-14 | guard-env-write | haiku | 1 | 1.0 | 0.0 | +1.0 | $0.003 |
 
 ## Fixed tasks
 Choose one small task per area before adding that area's plugin, and reuse it for every comparison.

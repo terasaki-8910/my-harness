@@ -47,6 +47,8 @@ claude --plugin-dir . plugin details core
 claude plugin eval . --runs 1 --allow-tools Write --no-publish
 ```
 
+`claude plugin validate .` passes with one expected warning: CLAUDE.md at the plugin root is not loaded as plugin context (it is there for working on this repository), so `--strict` fails on it. The LICENSE and icon notes are checks for submitting to the public plugin directory and do not affect the result.
+
 Record the `plugin details` result in `docs/measurements.md`. Use one eval run while tuning; the default of 3 runs is for decisions. `--no-publish` keeps the report local. The first run asks you to trust the plugin.
 
 ## Guard hook
@@ -87,7 +89,7 @@ Following the guide:
 
 ## Not confirmed in official docs or not tested
 
-- The repository root as both marketplace and plugin (`marketplace.json` and `plugin.json` side by side, `"source": "./"`): the docs show a plugin at the marketplace root with `"source": "./"`, but the pages read do not state this two-manifest layout. Installing from the marketplace has not been run.
+- The repository root as both marketplace and plugin (`marketplace.json` and `plugin.json` side by side, `"source": "./"`): the docs show a plugin at the marketplace root with `"source": "./"`, but the pages read do not state this two-manifest layout. `claude plugin validate .` (2.1.325) accepts it and checks both manifests. Installing from the marketplace has not been run.
 - Hook behavior on native Windows (Git Bash or PowerShell), WSL2 and Ubuntu: not run; only macOS was tested. The docs say `${CLAUDE_PLUGIN_ROOT}` is substituted (with forward slashes on Windows) and also exported as an environment variable.
 - The tool input fields of MultiEdit and NotebookEdit (`file_path`, `notebook_path`) are not documented on the pages read; the guard checks both names.
 - Read and Grep path checks do not catch every way file content can reach the model (for example, Grep over a whole directory).
