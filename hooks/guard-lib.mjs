@@ -14,7 +14,9 @@ function stripPatternRoot(pattern) {
 }
 
 export function globToRegExp(pattern) {
-  const glob = stripPatternRoot(pattern.replaceAll("\\", "/"));
+  const stripped = stripPatternRoot(pattern.replaceAll("\\", "/"));
+  // A trailing "/" means everything inside that directory, as in "dir/**".
+  const glob = stripped.endsWith("/") ? `${stripped}**` : stripped;
   let source = "";
 
   for (let index = 0; index < glob.length; index += 1) {
