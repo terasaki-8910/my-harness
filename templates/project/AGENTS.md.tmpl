@@ -1,0 +1,14 @@
+# <project name>
+
+## Commands
+- Build: <command>
+- Check (run before saying "done"): <test, screenshot comparison, or render check command>
+
+## Rules
+- Before saying "done", run the check and paste the result. If it could not run, write "not run".
+- Do not read or write .env files or credentials.
+- Ask before adding a dependency, using an external asset, or calling a paid API.
+- Scripts and hooks must run on Windows, WSL2, macOS and Ubuntu: write them in Node or Python and call them as `node scripts/<name>.mjs`.
+
+## Where things live
+- Procedures are skills, area rules are in .claude/rules/, pass/fail criteria are in docs/quality-gates.md. Do not repeat them here.
