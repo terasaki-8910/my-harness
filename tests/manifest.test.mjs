@@ -26,6 +26,7 @@ test("manifest and JSON template files parse as JSON", () => {
     path.join(repositoryRoot, ".claude-plugin", "plugin.json"),
     path.join(repositoryRoot, ".claude-plugin", "marketplace.json"),
     path.join(repositoryRoot, "hooks", "hooks.json"),
+    ...filesUnder("plugins").filter((file) => file.endsWith(`${path.sep}.claude-plugin${path.sep}plugin.json`)),
     ...filesUnder("templates").filter((file) => file.endsWith(".json.tmpl")),
   ];
   for (const file of files) {
@@ -51,6 +52,7 @@ test("agent and optional skill descriptions are one line and at most 200 charact
   const markdownFiles = [
     ...filesUnder("agents").filter((file) => file.endsWith(".md")),
     ...filesUnder("skills").filter((file) => path.basename(file) === "SKILL.md"),
+    ...filesUnder("plugins").filter((file) => path.basename(file) === "SKILL.md" || (file.includes(`${path.sep}agents${path.sep}`) && file.endsWith(".md"))),
   ];
   for (const file of markdownFiles) {
     const text = fs.readFileSync(file, "utf8");
@@ -60,5 +62,17 @@ test("agent and optional skill descriptions are one line and at most 200 charact
     assert.ok(description, `${file} has a description`);
     assert.equal(description[1].includes("\n"), false, `${file} description is one line`);
     assert.ok(description[1].length <= 200, `${file} description is at most 200 characters`);
+  }
+});
+
+test("marketplace plugin sources contain matching manifests", () => {
+  const marketplace = JSON.parse(fs.readFileSync(path.join(repositoryRoot, ".claude-plugin", "marketplace.json"), "utf8"));
+  for (const plugin of marketplace.plugins) {
+    const source = path.resolve(repositoryRoot, plugin.source);
+    const manifestPath = path.join(source, ".claude-plugin", "plugin.json");
+    assert.equal(fs.existsSync(source), true, `${plugin.name} source exists`);
+    assert.equal(fs.existsSync(manifestPath), true, `${plugin.name} manifest exists`);
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    assert.equal(manifest.name, plugin.name, `${plugin.name} manifest name matches`);
   }
 });
