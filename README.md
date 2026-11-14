@@ -1,6 +1,6 @@
 # ai-harness
 
-`ai-harness` is a personal Claude Code plugin marketplace following a personal harness design guide (2026-11-07): keep what loads every turn small, enforce rules with hooks and permissions instead of prose, and verify output with checks that run outside the model. v0.1 contains only the `core` plugin. Domain plugins (game/3D, video, documents) are added later one at a time under `plugins/<name>/`, enabled only in projects that use them, and kept only if measurements improve.
+`ai-harness` is a personal Claude Code plugin marketplace following a personal harness design guide (2026-11-07): keep what loads every turn small, enforce rules with hooks and permissions instead of prose, and verify output with checks that run outside the model. The repository root is the `core` plugin; optional domain plugins live under `plugins/<name>/`, are enabled only in projects that use them, and are kept only if measurements improve.
 
 ## What loads every turn
 
@@ -80,6 +80,8 @@ node scripts/init-project.mjs <project-dir>
 This creates `AGENTS.md`, `CLAUDE.md` (which imports `AGENTS.md`), `.claude/settings.json`, `.gitattributes` and `docs/quality-gates.md`, and never overwrites existing files. `templates/user/settings.json.tmpl` holds `permissions.disableBypassPermissionsMode: "disable"` for the user settings file; merge it by hand. The settings template's `Read(.env.*)` deny also blocks reading `.env.example`; remove that rule if a project needs it.
 
 ## Measure, then add
+
+The video domain plugin is documented in [`plugins/video/README.md`](plugins/video/README.md).
 
 Following the guide:
 

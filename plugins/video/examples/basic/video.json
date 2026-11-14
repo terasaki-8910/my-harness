@@ -1,0 +1,18 @@
+{
+  "page": "index.html",
+  "out": "out/basic.mp4",
+  "duration": 6,
+  "fps": 30,
+  "cursor": { "start": [960, 700] },
+  "timeline": [
+    { "at": 0.5, "do": "move", "to": "#card-2", "dur": 0.6 },
+    { "at": 1.3, "do": "click" },
+    { "at": 3.0, "do": "key", "key": "Escape" },
+    { "at": 3.6, "do": "scroll", "to": "#more", "dur": 0.8 }
+  ],
+  "mustShow": [
+    { "selector": "#detail", "min": 1.0, "label": "click result" },
+    { "selector": "#more", "min": 1.0 }
+  ],
+  "checks": { "duration": [5.8, 6.2] }
+}

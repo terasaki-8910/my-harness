@@ -8,6 +8,11 @@
       "name": "core",
       "source": "./",
       "description": "Protected-path guard hook, verifier agent, project templates."
+    },
+    {
+      "name": "video",
+      "source": "./plugins/video",
+      "description": "Short demo videos from HTML pages: scripted headless-Chrome capture, ffmpeg encode, file checks."
     }
   ]
 }

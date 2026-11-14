@@ -5,6 +5,7 @@ Record every change to what loads each turn. Keep a component only if the fixed 
 | Date | Change | Always-on tokens (`plugin details`) | `/context` total | Fixed tasks (3 runs each) | `/usage` note | Keep? |
 | --- | --- | --- | --- | --- | --- | --- |
 | 2026-11-14 | core 0.1.0: guard hook, verifier agent | ~44 (verifier ~40; ~440 each time it is called; hook 0) | not measured | not measured | not measured | baseline |
+| 2026-11-14 | video 0.1.0: demo-video skill | ~59 (demo-video ~60; ~890 each time it is called); core unchanged at ~44 | not measured | not measured | not measured | trial |
 
 ## Evals
 | Date | Case | Model | Runs per arm | With plugin | Without | Δ | Cost |
@@ -15,4 +16,4 @@ Record every change to what loads each turn. Keep a component only if the fixed 
 Choose one small task per area before adding that area's plugin, and reuse it for every comparison.
 - App / daily coding: <task>
 - Web game: <task>
-- Video: <task>
+- Video: render plugins/video/examples/basic (6 s, one click, one key, one scroll) and pass check.mjs.

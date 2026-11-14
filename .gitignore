@@ -6,3 +6,4 @@ node_modules/
 !.env.example
 !.env.sample
 !.env.template
+plugins/video/examples/*/out/
