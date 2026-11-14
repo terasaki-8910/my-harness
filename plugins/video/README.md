@@ -49,7 +49,7 @@ Paths are relative to `video.json` unless stated otherwise.
 | --- | --- |
 | `move` | `to` selector or `x` and `y`; `anchor: [0.5,0.5]`, `dur: 0.6`, `ease: "inOut"`. |
 | `click` | Optional `to`, moving first with `anchor: [0.5,0.5]`, `dur: 0.5`, `ease: "inOut"`; otherwise clicks the current cursor with duration zero. |
-| `scroll` | `to` selector or `x` and/or `y`; `in: null` (page), `offset: 0`, `dur: 0.8`, `ease: "inOut"`. |
+| `scroll` | `to` selector or `x` and/or `y`; `in: null` (page), `offset: 0`, `dur: 0.8`, `ease: "inOut"`. The end is clamped to the scrollable range, so the easing slows into the real end. |
 | `key` | `key`: Escape, Enter, Tab, Space, arrows, PageUp, PageDown, Home, End, or one character. |
 | `call` | Global `fn`, `args: []`. Promise results are awaited with a 5-second timeout. |
 | `wait` | No additional fields. |
@@ -68,9 +68,11 @@ Easing is `linear`, `in`, `out`, or `inOut`. Actions cannot overlap or end after
 
 ## Output
 
-Rendering writes the MP4 and `<base>.render.json`. Checking writes `<base>.check.json`, `<base>.contact.png`, and up to five PNGs in `<base>.frames/`. Contact-sheet tiles run left to right, top to bottom and have no embedded time labels; their times are in the check report.
+Rendering first deletes the previous run's MP4, reports, contact sheet and frames, so a run that fails before encoding cannot leave a stale video for check.mjs to pass. It then writes the MP4 and `<base>.render.json`. Checking writes `<base>.check.json`, `<base>.contact.png`, and up to five PNGs in `<base>.frames/`. Contact-sheet tiles run left to right, top to bottom and have no embedded time labels; their times are in the check report.
 
-Capture follows the page in real time. ffmpeg re-times the captured frames to the requested constant frame rate. `capture.maxGap` and `capture.motionFps` cover only move and scroll windows, where the screencast is expected to produce frames; still holds are excluded.
+Capture follows the page in real time. ffmpeg re-times the captured frames to the requested constant frame rate. `capture.maxGap` and `capture.motionFps` cover only the middle 80% of each move and scroll (by its planned `dur`), where the screencast is expected to produce frames; still holds and the eased ends, which move less than a pixel per frame, are excluded.
+
+Examples: `examples/basic/video.json` (6 s, the fixed task in docs/measurements.md) and `examples/basic/video-20s.json` (20 s, two clicks, two keys, two scrolls; the length of a typical "about 20 s" assignment video).
 
 ## Limits
 

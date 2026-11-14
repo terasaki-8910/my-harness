@@ -1,0 +1,22 @@
+{
+  "page": "index.html",
+  "out": "out/basic-20s.mp4",
+  "duration": 20,
+  "fps": 30,
+  "cursor": { "start": [960, 760] },
+  "timeline": [
+    { "at": 1.0, "do": "move", "to": "#card-1", "dur": 0.7, "label": "point at card 1" },
+    { "at": 2.0, "do": "click", "label": "open card 1" },
+    { "at": 4.5, "do": "key", "key": "Escape", "label": "close" },
+    { "at": 5.2, "do": "click", "to": "#card-3", "dur": 0.8, "label": "open card 3" },
+    { "at": 8.5, "do": "key", "key": "Escape", "label": "close" },
+    { "at": 9.5, "do": "scroll", "to": "#more", "dur": 1.2, "label": "scroll down" },
+    { "at": 13.5, "do": "scroll", "y": 0, "dur": 1.2, "label": "back to top" },
+    { "at": 15.5, "do": "click", "to": "#card-2", "dur": 0.8, "label": "open card 2" }
+  ],
+  "mustShow": [
+    { "selector": "#detail", "min": 4, "label": "click results" },
+    { "selector": "#more", "min": 2 }
+  ],
+  "checks": { "duration": [18, 22], "human": ["Each opened panel stays readable for at least 1.5 s"] }
+}

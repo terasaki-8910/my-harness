@@ -100,6 +100,12 @@ async function main() {
 
   try {
   const outPath = path.resolve(configDirectory, args.out ?? spec.out);
+  // Remove the previous run's outputs first, so check.mjs can never pass a stale video
+  // when this run fails before encoding (for example, Chrome or ffmpeg not found).
+  const outBase = outPath.toLowerCase().endsWith(".mp4") ? outPath.slice(0, -4) : outPath;
+  for (const stale of [outPath, `${outBase}.render.json`, `${outBase}.check.json`, `${outBase}.contact.png`, `${outBase}.frames`]) {
+    await fs.promises.rm(stale, { recursive: true, force: true });
+  }
   const toolchain = await findFfmpeg({ env: process.env, signal: abortController.signal });
   const chromePath = findChrome({ env: process.env, platform: process.platform });
   const frameDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), "demo-video-frames-"));
@@ -307,7 +313,7 @@ async function main() {
     };
     const base = outPath.toLowerCase().endsWith(".mp4") ? outPath.slice(0, -4) : outPath;
     await fs.promises.writeFile(`${base}.render.json`, `${JSON.stringify(report, null, 2)}\n`);
-    process.stdout.write(`Rendered ${outPath}: ${timedFrames.length} frames, motion ${report.capture.motionFps?.toFixed(1) ?? "n/a"} fps, max motion gap ${report.capture.maxGap.toFixed(3)} s\n`);
+    process.stdout.write(`${renderError ? "Encoded what was captured before the failure" : "Rendered"} ${outPath}: ${timedFrames.length} frames, motion ${report.capture.motionFps?.toFixed(1) ?? "n/a"} fps, max motion gap ${report.capture.maxGap.toFixed(3)} s\n`);
     if (args.keepFrames) process.stdout.write(`Frames kept at ${frameDirectory}\n`);
     if (renderError) throw renderError;
   } finally {
