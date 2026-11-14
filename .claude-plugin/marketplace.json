@@ -1,0 +1,13 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "ai-harness",
+  "description": "Personal Claude Code harness. Core plugin now; domain plugins are added one at a time.",
+  "owner": { "name": "terasaki-8910" },
+  "plugins": [
+    {
+      "name": "core",
+      "source": "./",
+      "description": "Protected-path guard hook, verifier agent, project templates."
+    }
+  ]
+}

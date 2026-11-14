@@ -1,0 +1,6 @@
+{
+  "name": "core",
+  "version": "0.1.0",
+  "description": "Common core harness: protected-path guard hook, verifier agent, project templates.",
+  "author": { "name": "terasaki-8910" }
+}
