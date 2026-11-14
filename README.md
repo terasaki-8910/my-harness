@@ -36,6 +36,8 @@ claude plugin update core@ai-harness
 
 Installing from the marketplace has not been tested yet; only `--plugin-dir` has.
 
+Check each environment after installing: start Claude Code in a scratch folder that contains a `.env` file and ask it to read `.env`. The reply must mention `Blocked by core guard`. If Claude reads the file instead, the hook is not running; the usual cause is that `node` is not on the PATH of the shell that runs hooks.
+
 ## Develop
 
 `claude --plugin-dir .` loads this checkout without installing.
@@ -61,7 +63,7 @@ Per-project additions go in `.claude/guard.json`:
 { "secrets": ["*.pem", "*.key"], "readOnly": ["assets/master/**"], "allow": [".env.test"] }
 ```
 
-Patterns without `/` match the file name at any depth. A leading `**/` means anywhere. Any other pattern containing `/` is relative to the project root. Matching ignores case, and `allow` wins over everything. Claude cannot edit `guard.json` itself because it is read-only by default. An invalid `guard.json` leaves the defaults on and prints a warning on every call until fixed.
+Patterns without `/` match the file name at any depth. A leading `**/` means anywhere. Any other pattern containing `/` is relative to the project root, and a trailing `/` covers everything inside that directory (`assets/master/` is the same as `assets/master/**`). Matching ignores case, and `allow` wins over everything. Claude cannot edit `guard.json` itself because it is read-only by default. An invalid `guard.json` leaves the defaults on and prints a warning on every call until fixed.
 
 Not covered in v0.1: Bash and PowerShell commands (for example `cat .env`) and symbolic links. Permission rules do not catch these reliably either, so use the sandbox (macOS, Linux, WSL2; native Windows has none) or review `git status` at the end of a turn.
 
@@ -91,6 +93,7 @@ Following the guide:
 
 - The repository root as both marketplace and plugin (`marketplace.json` and `plugin.json` side by side, `"source": "./"`): the docs show a plugin at the marketplace root with `"source": "./"`, but the pages read do not state this two-manifest layout. `claude plugin validate .` (2.1.325) accepts it and checks both manifests. Installing from the marketplace has not been run.
 - Hook behavior on native Windows (Git Bash or PowerShell), WSL2 and Ubuntu: not run; only macOS was tested. The docs say `${CLAUDE_PLUGIN_ROOT}` is substituted (with forward slashes on Windows) and also exported as an environment variable.
+- If `node` cannot be started by the hook shell (for example nvm or fnm set up only in an interactive shell profile on WSL2 or Ubuntu), the hook fails as a non-blocking error and the guard is silently off. Run the check under Install on every environment.
 - The tool input fields of MultiEdit and NotebookEdit (`file_path`, `notebook_path`) are not documented on the pages read; the guard checks both names.
 - Read and Grep path checks do not catch every way file content can reach the model (for example, Grep over a whole directory).
 - The 3-round limit and "at most 6 images" are design choices, not official numbers. LF line endings via .gitattributes is common practice, not from the Claude Code docs.

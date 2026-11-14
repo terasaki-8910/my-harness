@@ -140,6 +140,16 @@ test("19. globToRegExp implements globstar, star and question mark", () => {
   assert.equal(globToRegExp("*.md").test("a/b.md"), false);
   assert.equal(globToRegExp("?.txt").test("a.txt"), true);
   assert.equal(globToRegExp("?.txt").test("ab.txt"), false);
+  assert.equal(globToRegExp("a/").test("a/b"), true);
+  assert.equal(globToRegExp("a/").test("a/b/c"), true);
+  assert.equal(globToRegExp("a/").test("a"), false);
+});
+
+test("19b. a trailing slash protects the whole directory", () => {
+  const rules = [...defaultRules, { kind: "readOnly", pattern: "assets/master/", source: ".claude/guard.json" }];
+  assert.equal(decision("Write", { file_path: "/work/proj/assets/master/hero.png" }, { rules }).action, "deny");
+  assert.equal(decision("Write", { file_path: "/work/proj/assets/master/sub/x.png" }, { rules }).action, "deny");
+  assert.equal(decision("Write", { file_path: "/work/proj/assets/other/hero.png" }, { rules }).action, "allow");
 });
 
 test("20. loadConfig validates a real project config", () => {
