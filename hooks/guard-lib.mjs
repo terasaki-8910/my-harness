@@ -123,7 +123,9 @@ export function loadConfig(projectDir) {
     text = fs.readFileSync(configPath, "utf8");
   } catch (error) {
     if (error?.code === "ENOENT") return { rules, warnings };
-    throw error;
+    // Any other read failure (EACCES, EISDIR, ...) must not disable the defaults.
+    warnings.push(`.claude/guard.json could not be read (${error?.code ?? error?.message}); using defaults only`);
+    return { rules, warnings };
   }
 
   let config;

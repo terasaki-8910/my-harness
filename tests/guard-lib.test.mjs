@@ -150,6 +150,14 @@ test("20. loadConfig validates a real project config", () => {
 
     fs.mkdirSync(path.join(temporaryDirectory, ".claude"));
     const configPath = path.join(temporaryDirectory, ".claude", "guard.json");
+
+    fs.mkdirSync(configPath);
+    const unreadable = loadConfig(temporaryDirectory);
+    assert.deepEqual(unreadable.rules, defaultRules);
+    assert.equal(unreadable.warnings.length, 1);
+    assert.match(unreadable.warnings[0], /guard\.json could not be read/);
+    fs.rmdirSync(configPath);
+
     fs.writeFileSync(configPath, "{");
     const invalidJson = loadConfig(temporaryDirectory);
     assert.equal(invalidJson.rules.length, defaultRules.length);
