@@ -26,10 +26,14 @@
         : 1 - Math.pow(-2 * progress + 2, 3) / 2;
     }
 
+    function targetTop(section) {
+      return Math.max(0, Math.min(section.offsetTop, root.scrollHeight - window.innerHeight));
+    }
+
     function go(section) {
       if (!section) return;
       var from = window.scrollY;
-      var to = Math.max(0, Math.min(section.offsetTop, root.scrollHeight - window.innerHeight));
+      var to = targetTop(section);
       pending = section;
       current = section;
       markNav(section);
@@ -86,9 +90,25 @@
       if (index < 0) return;
       var nextKeys = ["ArrowRight", "ArrowDown", "PageDown", " ", "Spacebar"];
       var previousKeys = ["ArrowLeft", "ArrowUp", "PageUp"];
+      // A slide taller than the window (phone width, long content): vertical keys scroll it natively
+      // until its end (or start) is on screen, so no unread content is skipped.
+      var box = sections[index].getBoundingClientRect();
+      var vertical = event.key !== "ArrowRight" && event.key !== "ArrowLeft";
       var destination = null;
-      if (nextKeys.includes(event.key)) destination = sections[Math.min(sections.length - 1, index + 1)];
-      else if (previousKeys.includes(event.key)) destination = sections[Math.max(0, index - 1)];
+      var direction = 0;
+      if (nextKeys.includes(event.key)) {
+        if (vertical && !pending && box.bottom > window.innerHeight + 2) return;
+        direction = 1;
+      } else if (previousKeys.includes(event.key)) {
+        if (vertical && !pending && box.top < -2) return;
+        direction = -1;
+      }
+      if (direction !== 0) {
+        // Short slides at the end of the page share one scroll position; skip those so a key press always moves.
+        var next = index + direction;
+        while (next > 0 && next < sections.length - 1 && Math.abs(targetTop(sections[next]) - window.scrollY) < 2) next += direction;
+        destination = sections[Math.max(0, Math.min(sections.length - 1, next))];
+      }
       else if (event.key === "Home") destination = sections[0];
       else if (event.key === "End") destination = sections[sections.length - 1];
       if (!destination || destination === sections[index]) return;
