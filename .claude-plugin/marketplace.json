@@ -13,6 +13,11 @@
       "name": "video",
       "source": "./plugins/video",
       "description": "Short demo videos from HTML pages: scripted headless-Chrome capture, ffmpeg encode, file checks."
+    },
+    {
+      "name": "slides",
+      "source": "./plugins/slides",
+      "description": "One-message-per-screen HTML slides: starter page, browser checks, review sheets."
     }
   ]
 }
