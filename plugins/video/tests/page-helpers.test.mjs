@@ -33,7 +33,7 @@ function harness() {
     Promise, Error, Math, Number,
   });
   vm.runInContext(source, context);
-  return { api: window.__demoVideo, body, calls, frames, scroller, window };
+  return { api: window.__demoVideo, body, calls, document, frames, scroller, window };
 }
 
 test("scripted page scroll disables and restores snap after the last frame", async () => {
@@ -59,4 +59,15 @@ test("scripted page scroll restores snap when a frame rejects", async () => {
   await assert.rejects(scrolling, /scroll failed/);
   assert.equal(scroller.style.scrollSnapType, "x mandatory");
   assert.equal(body.style.scrollSnapType, "y proximity");
+});
+
+test("mustShow inspection counts non-whitespace code points when first visible", () => {
+  const { api, document } = harness();
+  document.querySelector = () => ({
+    innerText: " 日 本 \n A😀 ",
+    getBoundingClientRect() { return { left: 0, top: 0, right: 100, bottom: 100, width: 100, height: 100 }; },
+  });
+  const [result] = api.inspect(["#copy"]);
+  assert.equal(result.visible, true);
+  assert.equal(result.chars, 4);
 });

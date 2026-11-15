@@ -9,21 +9,25 @@ import { buildEncodeArgs } from "./lib/encode.mjs";
 import { buildConcat, captureMotionMetrics } from "./lib/frames.mjs";
 import { keyEvents } from "./lib/input.mjs";
 import { startServer } from "./lib/server.mjs";
-import { ease, lerpPoint, validate } from "./lib/timeline.mjs";
+import { ease, lerpPoint, resolveVariant, validate } from "./lib/timeline.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 const now = () => performance.now() / 1000;
 
 function usage() {
-  return "Usage: render.mjs <video.json> [--out file] [--keep-frames]";
+  return "Usage: render.mjs <video.json> [--variant name] [--out file] [--keep-frames]";
 }
 
 function parseArguments(argv) {
-  const result = { file: null, out: null, keepFrames: false };
+  const result = { file: null, out: null, variant: null, keepFrames: false };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--keep-frames") result.keepFrames = true;
+    else if (argument === "--variant") {
+      result.variant = argv[++index];
+      if (!result.variant) throw new Error("--variant needs a name");
+    }
     else if (argument === "--out") {
       result.out = argv[++index];
       if (!result.out) throw new Error("--out needs a file path");
@@ -79,7 +83,7 @@ async function main() {
   const configPath = path.resolve(args.file);
   const configDirectory = path.dirname(configPath);
   const raw = JSON.parse(await fs.promises.readFile(configPath, "utf8"));
-  const { spec, errors } = validate(raw);
+  const { spec, errors } = validate(resolveVariant(raw, args.variant));
   if (errors.length > 0) {
     for (const error of errors) process.stderr.write(`video.json: ${error}\n`);
     process.exitCode = 1;
@@ -114,7 +118,7 @@ async function main() {
   const frameWrites = [];
   const consoleMessages = [];
   const actions = [];
-  const mustShow = spec.mustShow.map((item) => ({ ...item, visibleSec: 0 }));
+  const mustShow = spec.mustShow.map((item) => ({ ...item, visibleSec: 0, chars: null }));
   let timestampSource = "metadata";
   let t0;
   let t0Epoch;
@@ -193,7 +197,8 @@ async function main() {
 
     const initialVisibility = await evaluate(cdp, sessionId, "document.visibilityState");
     if (initialVisibility !== "visible") throw new Error(`page is ${initialVisibility} before the timeline started`);
-    let sampledVisibility = await evaluate(cdp, sessionId, `window.__demoVideo.visible(${JSON.stringify(mustShow.map((item) => item.selector))})`);
+    let sampledVisibility = await evaluate(cdp, sessionId, `window.__demoVideo.inspect(${JSON.stringify(mustShow.map((item) => item.selector))})`);
+    sampledVisibility.forEach((value, index) => { if (value.visible && mustShow[index].chars === null) mustShow[index].chars = value.chars; });
     t0 = now();
     t0Epoch = Date.now() / 1000;
     let cursor = spec.cursor.start ? { x: spec.cursor.start[0], y: spec.cursor.start[1] } : { x: 0, y: 0 };
@@ -205,7 +210,12 @@ async function main() {
       let nextSample = t0 + 0.25;
       const credit = (current) => {
         const delta = Math.max(0, current - previous);
-        sampledVisibility.forEach((value, index) => { if (value) mustShow[index].visibleSec += delta; });
+        sampledVisibility.forEach((value, index) => {
+          if (value.visible) {
+            mustShow[index].visibleSec += delta;
+            if (mustShow[index].chars === null) mustShow[index].chars = value.chars;
+          }
+        });
         previous = current;
       };
       while (polling) {
@@ -213,7 +223,7 @@ async function main() {
         credit(now());
         if (!polling) break;
         if (!actionRunning) {
-          visibilitySample = evaluate(cdp, sessionId, `window.__demoVideo.visible(${JSON.stringify(mustShow.map((item) => item.selector))})`);
+          visibilitySample = evaluate(cdp, sessionId, `window.__demoVideo.inspect(${JSON.stringify(mustShow.map((item) => item.selector))})`);
           const nextVisibility = await visibilitySample;
           credit(now());
           sampledVisibility = nextVisibility;

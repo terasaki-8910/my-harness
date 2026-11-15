@@ -20,15 +20,19 @@ This records the plugin in that project's `.claude/settings.json`.
 
 ```text
 node plugins/video/skills/demo-video/scripts/plan.mjs path/to/video.json
+node plugins/video/skills/demo-video/scripts/plan.mjs path/to/video.json --variant 20s
 node plugins/video/skills/demo-video/scripts/render.mjs path/to/video.json
+node plugins/video/skills/demo-video/scripts/render.mjs path/to/video.json --variant 20s
 node plugins/video/skills/demo-video/scripts/render.mjs path/to/video.json --out path/to/demo.mp4 --keep-frames
 node plugins/video/skills/demo-video/scripts/check.mjs path/to/video.json
-node plugins/video/skills/demo-video/scripts/check.mjs path/to/video.json --file path/to/demo.mp4
+node plugins/video/skills/demo-video/scripts/check.mjs path/to/video.json --variant 20s --file path/to/demo.mp4
 node plugins/video/skills/demo-video/scripts/review.mjs path/to/video.json
-node plugins/video/skills/demo-video/scripts/review.mjs path/to/video.json --file path/to/demo.mp4 --fps 15 --from 4 --to 6
+node plugins/video/skills/demo-video/scripts/review.mjs path/to/video.json --variant 20s --file path/to/demo.mp4 --fps 15 --from 4 --to 6
+node plugins/video/skills/demo-video/scripts/pack.mjs path/to/page.html path/to/packed.html
+node plugins/video/skills/demo-video/scripts/pack.mjs path/to/page.html path/to/packed.html --check
 ```
 
-`plan.mjs` validates without starting Chrome or ffmpeg and prints the resolved action timetable. `review.mjs` replaces `<base>.review/` with numbered 5x5 review sheets; `--fps` defaults to 4. It extracts frames with ffmpeg and uses headless Chrome to draw a timecode on every tile.
+`plan.mjs` validates without starting Chrome or ffmpeg and prints the resolved action timetable. `review.mjs` replaces `<base>.review/` with numbered 5x5 review sheets; `--fps` defaults to 4. It extracts frames with ffmpeg and uses headless Chrome to draw a timecode on every tile. All four video commands accept the same `--variant <name>` option. `render.mjs --out` and `check.mjs`/`review.mjs --file` still override the resolved variant output.
 
 ## `video.json`
 
@@ -47,8 +51,31 @@ Paths are relative to `video.json` unless stated otherwise.
 | `ready` | Optional JavaScript expression, polled until truthy for up to 10 seconds. |
 | `timeline` | Ordered actions; `[]`. Actions may have a `label`, `group`, timing, and `skip: true`. |
 | `skipGroups` | Group names to remove before timing; `[]`. Every name must be used by an action. |
-| `mustShow` | `{ selector, min, label? }` visibility requirements; `[]`. |
+| `mustShow` | `{ selector, min, label?, read?, readingCps? }` visibility requirements; `[]`. |
 | `checks` | Output checks described below; `{}`. |
+| `variants` | Named `{ out?, skipGroups?, duration?, tail?, checks? }` overrides; `{}`. |
+
+### Variants
+
+Declare cut versions once and pass the same name to plan, render, check, and review:
+
+```json
+{
+  "page": "index.html",
+  "out": "out/demo.mp4",
+  "duration": 30,
+  "checks": { "duration": [29, 31] },
+  "variants": {
+    "20s": {
+      "skipGroups": ["extended"],
+      "duration": 20,
+      "checks": { "duration": [19, 21] }
+    }
+  }
+}
+```
+
+Only `out`, `skipGroups`, `duration`, `tail`, and `checks` are allowed in an override. `checks` is shallow-merged over the base checks. When `out` is omitted, the variant name is inserted before the base extension (`out/demo.mp4` becomes `out/demo-20s.mp4`) so a cut cannot overwrite the base video. An unknown variant is an error that lists the declared names. With no `--variant`, base behavior is unchanged.
 
 ### Actions
 
@@ -74,6 +101,16 @@ Planned action length is `dur` for moves and scrolls, `dur` for clicks with `to`
 | NEEDS HUMAN | Legibility, pacing, privacy, silent comprehensibility, plus every string in `human` (`[]`). |
 
 `checks.duration` defaults to planned duration ±0.25 s. `maxBytes` has no default.
+
+Every satisfied visibility requirement is printed as `PASS mustShow <label or selector>: <visibleSec> s (min <min> s)`; unmet requirements remain `FAIL` lines. Set `read: true` on prose that must be readable. Rendering records its non-whitespace character count the first time it is visible, and checking warns when the visible time is shorter than `chars / readingCps`. `readingCps` can be set on the entry or globally as `checks.readingCps`; the default is 8 characters/s, a rough value for Japanese text. About 15 characters/s is a useful starting point for English. `read` must be boolean and both reading-rate fields must be positive numbers.
+
+## Packing a page
+
+`pack.mjs` turns a local page into one self-contained HTML file. It inlines local stylesheets and their font/image `url(...)` assets, inline-style URLs, local scripts, images, picture sources, SVG images, and icons. Classic external scripts marked `defer` or `async` move in document order to the end of `<body>`; inline module scripts stay in place. The supported asset extensions are PNG, JPG/JPEG, GIF, WebP, AVIF, SVG, ICO, WOFF/WOFF2, TTF, and OTF. On success it prints the output byte size and counts for inlined stylesheets, scripts, images, and fonts.
+
+Packing fails, lists every problem, and does not write the output when it finds an HTTP(S) or protocol-relative `src`, `href`, or CSS URL; `srcset`; sourced video, audio, iframe, embed, or object content; a local-file anchor; a missing or unsupported local asset; or CSS `@import`. Anchors within the page are allowed.
+
+`--check` copies only the packed file into a temporary directory and opens that copy in headless Chrome. It prints PASS/FAIL lines for requests, images, page errors, and console errors, and exits 1 if a request targets anything except that file or a data URL, any image has `naturalWidth === 0`, or the page reports an error. This Chrome check is in addition to the static pack validation.
 
 ## Output
 

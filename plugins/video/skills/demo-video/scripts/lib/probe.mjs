@@ -101,6 +101,17 @@ export function parseAnalysis(stderr, totalDuration) {
   return { black, freezes };
 }
 
+export function readingTimeWarning(item, checks = {}) {
+  if (item?.read !== true) return null;
+  const chars = Number(item.chars);
+  const visibleSec = Number(item.visibleSec);
+  const cps = item.readingCps ?? checks.readingCps ?? 8;
+  if (!Number.isFinite(chars) || chars < 0 || !Number.isFinite(visibleSec) || !Number.isFinite(cps) || cps <= 0) return null;
+  const needed = chars / cps;
+  if (visibleSec >= needed) return null;
+  return `mustShow ${item.label ?? item.selector}: ${chars} characters need about ${needed.toFixed(1)} s at ${cps} chars/s; on screen ${visibleSec.toFixed(2)} s`;
+}
+
 export function verdict({ fileError, summary, boxes = [], analysis = { black: [], freezes: [] }, spec, render }) {
   const pass = [];
   const warn = [];
@@ -133,7 +144,12 @@ export function verdict({ fileError, summary, boxes = [], analysis = { black: []
   if (!render) {
     warn.push("render report: missing; skipped action, mustShow, console, and capture timing checks");
   } else {
-    for (const item of render.mustShow ?? []) if (item.visibleSec < item.min) fail.push(`mustShow ${item.label ?? item.selector}: ${item.visibleSec.toFixed(2)} s is below ${item.min} s`);
+    for (const item of render.mustShow ?? []) {
+      if (item.visibleSec < item.min) fail.push(`mustShow ${item.label ?? item.selector}: ${item.visibleSec.toFixed(2)} s is below ${item.min} s`);
+      else pass.push(`mustShow ${item.label ?? item.selector}: ${item.visibleSec.toFixed(2)} s (min ${item.min} s)`);
+      const readingWarning = readingTimeWarning(item, spec.checks);
+      if (readingWarning) warn.push(readingWarning);
+    }
     for (const action of render.actions ?? []) {
       if (action.error) fail.push(`action ${action.index} ${action.do}: ${action.error}`);
       if (action.startedAt - action.at > 0.15) warn.push(`action ${action.index} ${action.do}: started ${(action.startedAt - action.at).toFixed(3)} s late`);

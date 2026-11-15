@@ -9,6 +9,43 @@ const ACTIONS = new Set(["move", "click", "scroll", "key", "call", "wait"]);
 const object = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const finite = (value) => typeof value === "number" && Number.isFinite(value);
 const positive = (value) => finite(value) && value > 0;
+const VARIANT_KEYS = new Set(["out", "skipGroups", "duration", "tail", "checks"]);
+
+function variantOut(out, name) {
+  const extension = path.extname(out);
+  return extension ? `${out.slice(0, -extension.length)}-${name}${extension}` : `${out}-${name}`;
+}
+
+export function resolveVariant(input, name = null) {
+  if (!object(input)) return input;
+  const variants = input.variants;
+  if (variants !== undefined && !object(variants)) throw new Error("variants: must be an object");
+  for (const [variantName, overrides] of Object.entries(object(variants) ? variants : {})) {
+    if (!object(overrides)) throw new Error(`variants.${variantName}: must be an object`);
+    for (const key of Object.keys(overrides)) {
+      if (!VARIANT_KEYS.has(key)) throw new Error(`variants.${variantName}: unknown override key ${JSON.stringify(key)}`);
+    }
+  }
+  const { variants: _variants, ...base } = input;
+  if (name === null || name === undefined) return base;
+  if (typeof name !== "string" || name.length === 0) throw new Error("--variant needs a non-empty name");
+  const available = Object.keys(object(variants) ? variants : {});
+  if (!Object.hasOwn(variants ?? {}, name)) {
+    throw new Error(`unknown variant ${JSON.stringify(name)}; available variants: ${available.join(", ") || "none"}`);
+  }
+  const overrides = variants[name];
+  const out = overrides.out ?? variantOut(base.out ?? "out/video.mp4", name);
+  const resolved = {
+    ...base,
+    ...overrides,
+    out,
+    checks: overrides.checks === undefined
+      ? base.checks
+      : object(overrides.checks) ? { ...(object(base.checks) ? base.checks : {}), ...overrides.checks } : overrides.checks,
+  };
+  if (overrides.duration !== undefined && overrides.duration !== "auto" && overrides.tail === undefined) delete resolved.tail;
+  return resolved;
+}
 
 export function ease(name, t) {
   const value = Math.max(0, Math.min(1, t));
@@ -174,6 +211,8 @@ export function validate(input) {
     if (typeof item.selector !== "string" || item.selector.length === 0) errors.push(`mustShow ${index} field selector: is required`);
     if (!positive(item.min)) errors.push(`mustShow ${index} field min: must be greater than 0`);
     if (item.label !== undefined && typeof item.label !== "string") errors.push(`mustShow ${index} field label: must be a string`);
+    if (item.read !== undefined && typeof item.read !== "boolean") errors.push(`mustShow ${index} field read: must be a boolean`);
+    if (item.readingCps !== undefined && !positive(item.readingCps)) errors.push(`mustShow ${index} field readingCps: must be a number greater than 0`);
     return { ...item };
   });
 
@@ -186,6 +225,7 @@ export function validate(input) {
     maxStaticShare: checksSource.maxStaticShare ?? 0.85,
     audio: checksSource.audio ?? "none",
     human: checksSource.human ?? [],
+    readingCps: checksSource.readingCps,
   };
   if (!Array.isArray(checks.duration) || checks.duration.length !== 2 || !checks.duration.every((value) => finite(value) && value >= 0) || checks.duration[0] > checks.duration[1]) errors.push("checks.duration: must be [min, max]");
   if (checks.maxBytes !== undefined && (!Number.isInteger(checks.maxBytes) || checks.maxBytes <= 0)) errors.push("checks.maxBytes: must be a positive integer");
@@ -193,6 +233,7 @@ export function validate(input) {
   if (!finite(checks.maxStaticShare) || checks.maxStaticShare < 0 || checks.maxStaticShare > 1) errors.push("checks.maxStaticShare: must be between 0 and 1");
   if (!new Set(["none", "allowed"]).has(checks.audio)) errors.push('checks.audio: must be "none" or "allowed"');
   if (!Array.isArray(checks.human) || !checks.human.every((item) => typeof item === "string")) errors.push("checks.human: must be a string array");
+  if (checks.readingCps !== undefined && !positive(checks.readingCps)) errors.push("checks.readingCps: must be a number greater than 0");
 
   const root = source.root ?? (typeof source.page === "string" && !/^https?:\/\//i.test(source.page) ? path.dirname(source.page) : undefined);
   return { spec: { page: source.page, out: source.out ?? "out/video.mp4", root, viewport, fps, duration, tail: durationSource === "auto" ? tail : undefined, cursor, ready, timeline, skipGroups, mustShow, checks }, errors };

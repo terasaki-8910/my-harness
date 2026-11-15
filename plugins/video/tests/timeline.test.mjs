@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { ease, lerp, lerpPoint, validate } from "../skills/demo-video/scripts/lib/timeline.mjs";
+import { ease, lerp, lerpPoint, resolveVariant, validate } from "../skills/demo-video/scripts/lib/timeline.mjs";
 
 const testDirectory = path.dirname(fileURLToPath(import.meta.url));
 
@@ -36,6 +36,32 @@ test("valid timeline receives defaults", () => {
   assert.equal(spec.checks.blackMax, 0.5);
   assert.equal(spec.checks.maxStaticShare, 0.85);
   assert.equal(spec.checks.audio, "none");
+});
+
+test("variants merge allowed overrides and synthesize a safe output name", () => {
+  const raw = {
+    page: "index.html", out: "out/demo.mp4", duration: 30, skipGroups: [], checks: { duration: [29, 31], readingCps: 8 },
+    variants: {
+      "20s": { duration: 20, skipGroups: ["long"], checks: { duration: [19, 21] } },
+      square: { out: "out/square.mp4", duration: 10 },
+    },
+  };
+  const cut = resolveVariant(raw, "20s");
+  assert.equal(cut.out, "out/demo-20s.mp4");
+  assert.equal(cut.duration, 20);
+  assert.deepEqual(cut.skipGroups, ["long"]);
+  assert.deepEqual(cut.checks, { duration: [19, 21], readingCps: 8 });
+  assert.equal(resolveVariant(raw, "square").out, "out/square.mp4");
+  const base = resolveVariant(raw);
+  assert.equal(base.out, "out/demo.mp4");
+  assert.equal("variants" in base, false);
+  const numericCut = resolveVariant({ page: "x", duration: "auto", tail: 2, variants: { fixed: { duration: 10 } } }, "fixed");
+  assert.equal("tail" in numericCut, false);
+});
+
+test("variant resolution rejects unknown keys and names with available choices", () => {
+  assert.throws(() => resolveVariant({ variants: { short: { page: "other.html" } } }, "short"), /unknown override key "page"/);
+  assert.throws(() => resolveVariant({ variants: { short: {}, square: {} } }, "missing"), /unknown variant "missing"; available variants: short, square/);
 });
 
 test("relative waits chain from the previous planned end", () => {
@@ -164,6 +190,14 @@ test("timeline reports field, ordering, overlap and duration errors with action 
 test("top-level, cursor, ready, mustShow and checks errors are reported", () => {
   const { errors } = validate({ page: "", out: "", root: "", duration: 0, viewport: { width: 0, height: 1.5 }, fps: 0, cursor: { visible: "yes", size: 0, start: [1] }, ready: {}, timeline: {}, mustShow: [{ selector: "", min: 0, label: 3 }], checks: { duration: [2, 1], maxBytes: 0, blackMax: 0, maxStaticShare: 2, audio: "yes", human: [1] } });
   for (const field of ["page", "out", "root", "duration", "viewport.width", "viewport.height", "fps", "cursor.visible", "cursor.size", "cursor.start", "ready", "timeline", "mustShow 0 field selector", "mustShow 0 field min", "mustShow 0 field label", "checks.duration", "checks.maxBytes", "checks.blackMax", "checks.maxStaticShare", "checks.audio", "checks.human"]) assert.ok(errors.some((error) => error.startsWith(field)), field);
+});
+
+test("reading-time fields are validated", () => {
+  const validReading = validate({ page: "x", duration: 2, mustShow: [{ selector: "#x", min: 1, read: true, readingCps: 12 }], checks: { readingCps: 15 } });
+  assert.deepEqual(validReading.errors, []);
+  assert.equal(validReading.spec.checks.readingCps, 15);
+  const invalid = validate({ page: "x", duration: 2, mustShow: [{ selector: "#x", min: 1, read: "yes", readingCps: 0 }], checks: { readingCps: -1 } });
+  for (const field of ["mustShow 0 field read", "mustShow 0 field readingCps", "checks.readingCps"]) assert.ok(invalid.errors.some((error) => error.startsWith(field)), field);
 });
 
 test("ease and lerp helpers", () => {
