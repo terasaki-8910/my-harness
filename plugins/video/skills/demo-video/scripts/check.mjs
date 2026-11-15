@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { findFfmpeg, runProcess } from "./lib/chrome.mjs";
 import { mp4BoxOrder, parseAnalysis, summarizeFfprobe, verdict } from "./lib/probe.mjs";
+import { findFont, hasDrawtext, reviewFilter } from "./lib/review.mjs";
 import { validate } from "./lib/timeline.mjs";
 
 function parseArguments(argv) {
@@ -39,6 +40,12 @@ async function main() {
   const base = file.toLowerCase().endsWith(".mp4") ? file.slice(0, -4) : file;
   await fs.promises.mkdir(path.dirname(base), { recursive: true });
   const tools = await findFfmpeg({ env: process.env });
+  let drawtext = false;
+  try {
+    const filters = await runProcess(tools.ffmpeg, ["-hide_banner", "-filters"]);
+    drawtext = hasDrawtext(`${filters.stdout}\n${filters.stderr}`);
+  } catch {}
+  const reviewFont = drawtext ? findFont() : null;
   let fileError;
   let summary = {};
   let boxes = [];
@@ -66,7 +73,7 @@ async function main() {
     try {
       await runProcess(tools.ffmpeg, [
         "-y", "-hide_banner", "-loglevel", "error", "-i", file, "-vf",
-        `fps=1/${interval},scale=384:-2,tile=5x4:padding=6:margin=6:color=white`, "-frames:v", "1", `${base}.contact.png`,
+        reviewFilter({ fps: `1/${interval}`, width: 384, cols: 5, rows: 4, font: reviewFont }), "-frames:v", "1", `${base}.contact.png`,
       ]);
       result.pass.push("contact sheet: 20 tiles, left to right then top to bottom");
     } catch (error) {
@@ -106,6 +113,7 @@ async function main() {
   for (const message of result.warn) process.stdout.write(`WARN ${message}\n`);
   for (const message of result.fail) process.stdout.write(`FAIL ${message}\n`);
   process.stdout.write("Contact sheet tiles run left to right, top to bottom.\n");
+  process.stdout.write(`tiles: ${tiles.map((time, index) => `${index + 1}=${Number.isFinite(time) ? time.toFixed(2) : "n/a"}`).join(" ")}\n`);
   process.stdout.write("NEEDS HUMAN\n");
   for (const item of human) process.stdout.write(`- ${item}\n`);
   if (result.fail.length > 0) process.exitCode = 1;

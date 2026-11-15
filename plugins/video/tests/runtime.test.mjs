@@ -38,7 +38,7 @@ test("encode arguments convert JPEG full range to limited-range BT.709 yuv420p",
   ]);
 });
 
-test("capture metrics use only move and scroll windows", () => {
+test("capture metrics use move and scroll windows", () => {
   const frames = [0.1, 0.2, 0.8, 1.5, 2.1, 2.2, 2.3, 2.4].map((time, index) => ({ file: `${index}.jpg`, ts: 100 + time }));
   const metrics = captureMotionMetrics(frames, { start: 100, actions: [
     { do: "move", startedAt: 0, endedAt: 1 },
@@ -47,8 +47,22 @@ test("capture metrics use only move and scroll windows", () => {
   ] });
   // Middle 80% of each window: move [0.1, 0.9], scroll [2.05, 2.45].
   assert.ok(Math.abs(metrics.maxGap - 0.6) < 1e-9);
-  assert.ok(Math.abs(metrics.motionFps - (6 / 1.2)) < 1e-9);
-  assert.deepEqual(captureMotionMetrics(frames, { start: 100, actions: [{ do: "click", startedAt: 0, endedAt: 1 }] }), { maxGap: 0, motionFps: null });
+  assert.ok(Math.abs(metrics.motionFps - (7 / 1.2)) < 1e-9);
+  assert.deepEqual(captureMotionMetrics(frames, { start: 100, actions: [{ do: "click", startedAt: 0, endedAt: 1 }] }), { maxGap: 0, motionFps: null, windows: [] });
+});
+
+test("capture metrics count moving clicks and return per-window stats", () => {
+  const frames = [1.1, 1.2, 1.4, 1.7, 1.8].map((time, index) => ({ file: `${index}.jpg`, ts: 100 + time }));
+  const metrics = captureMotionMetrics(frames, { start: 100, actions: [{ index: 3, do: "click", dur: 1, startedAt: 1, endedAt: 2.1 }] });
+  assert.equal(metrics.windows.length, 1);
+  assert.equal(metrics.windows[0].index, 3);
+  assert.equal(metrics.windows[0].do, "click");
+  assert.ok(Math.abs(metrics.windows[0].from - 1.1) < 1e-9);
+  assert.ok(Math.abs(metrics.windows[0].to - 1.9) < 1e-9);
+  assert.equal(metrics.windows[0].frames, 5);
+  assert.ok(Math.abs(metrics.windows[0].fps - 6.25) < 1e-9);
+  assert.ok(Math.abs(metrics.windows[0].maxGap - 0.3) < 1e-9);
+  assert.equal(metrics.maxGap, metrics.windows[0].maxGap);
 });
 
 test("capture metrics use the planned duration when it is recorded", () => {

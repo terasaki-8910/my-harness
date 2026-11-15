@@ -122,6 +122,8 @@ async function main() {
   let captureReadyForEncode = false;
   let polling = false;
   let pollingError;
+  let actionRunning = false;
+  let visibilitySample = Promise.resolve();
   let visibilityPolling = Promise.resolve();
 
   try {
@@ -191,6 +193,7 @@ async function main() {
 
     const initialVisibility = await evaluate(cdp, sessionId, "document.visibilityState");
     if (initialVisibility !== "visible") throw new Error(`page is ${initialVisibility} before the timeline started`);
+    let sampledVisibility = await evaluate(cdp, sessionId, `window.__demoVideo.visible(${JSON.stringify(mustShow.map((item) => item.selector))})`);
     t0 = now();
     t0Epoch = Date.now() / 1000;
     let cursor = spec.cursor.start ? { x: spec.cursor.start[0], y: spec.cursor.start[1] } : { x: 0, y: 0 };
@@ -198,14 +201,26 @@ async function main() {
 
     polling = true;
     visibilityPolling = (async () => {
-      let previous = now();
-      while (polling) {
-        const current = now();
-        const visible = await evaluate(cdp, sessionId, `window.__demoVideo.visible(${JSON.stringify(mustShow.map((item) => item.selector))})`);
+      let previous = t0;
+      let nextSample = t0 + 0.25;
+      const credit = (current) => {
         const delta = Math.max(0, current - previous);
-        visible.forEach((value, index) => { if (value) mustShow[index].visibleSec += delta; });
+        sampledVisibility.forEach((value, index) => { if (value) mustShow[index].visibleSec += delta; });
         previous = current;
-        await sleep(100);
+      };
+      while (polling) {
+        await waitUntil(nextSample);
+        credit(now());
+        if (!polling) break;
+        if (!actionRunning) {
+          visibilitySample = evaluate(cdp, sessionId, `window.__demoVideo.visible(${JSON.stringify(mustShow.map((item) => item.selector))})`);
+          const nextVisibility = await visibilitySample;
+          credit(now());
+          sampledVisibility = nextVisibility;
+          visibilitySample = Promise.resolve();
+        }
+        nextSample += 0.25;
+        if (nextSample < now()) nextSample = now() + 0.25;
       }
     })().catch((error) => { pollingError = error; });
 
@@ -223,20 +238,27 @@ async function main() {
         await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", ...cursor }, sessionId);
         return;
       }
-      while (true) {
-        const progress = Math.min(1, (now() - started) / action.dur);
+      let firstSendError;
+      for (let tick = 1; started + tick / 60 < started + action.dur; tick += 1) {
+        const tickAt = started + tick / 60;
+        await waitUntil(tickAt);
+        const progress = Math.min(1, (tickAt - started) / action.dur);
         cursor = lerpPoint(start, target, ease(action.ease, progress));
-        await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", ...cursor }, sessionId);
-        if (progress >= 1) break;
-        await sleep(16);
+        cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", ...cursor }, sessionId).catch((error) => { firstSendError ??= error; });
       }
+      await waitUntil(started + action.dur);
+      cursor = { x: target.x, y: target.y };
+      await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", ...cursor }, sessionId);
+      if (firstSendError) throw firstSendError;
     }
 
     for (let index = 0; index < spec.timeline.length; index += 1) {
       const action = spec.timeline[index];
       await waitUntil(t0 + action.at);
+      await visibilitySample;
       const record = { index, do: action.do, label: action.label, at: action.at, dur: action.dur, startedAt: now() - t0 };
       actions.push(record);
+      actionRunning = true;
       try {
         if (action.do === "move") await move(action);
         else if (action.do === "click") {
@@ -258,6 +280,7 @@ async function main() {
         renderError = error;
       } finally {
         record.endedAt = now() - t0;
+        actionRunning = false;
       }
       try {
         const visibility = await evaluate(cdp, sessionId, "document.visibilityState");
@@ -305,7 +328,7 @@ async function main() {
     const span = timedFrames.length > 1 ? timedFrames.at(-1).ts - timedFrames[0].ts : 0;
     const report = {
       planned: { duration: spec.duration, fps: spec.fps, width: spec.viewport.width, height: spec.viewport.height },
-      capture: { frames: timedFrames.length, meanFps: span > 0 ? (timedFrames.length - 1) / span : 0, maxGap: motion.maxGap, motionFps: motion.motionFps, timestampSource },
+      capture: { frames: timedFrames.length, meanFps: span > 0 ? (timedFrames.length - 1) / span : 0, maxGap: motion.maxGap, motionFps: motion.motionFps, windows: motion.windows, timestampSource },
       actions,
       mustShow: mustShow.map((item) => ({ ...item, visibleSec: Number(item.visibleSec.toFixed(3)) })),
       console: consoleMessages.slice(0, 20),

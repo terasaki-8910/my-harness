@@ -59,3 +59,8 @@ test("low motion frame rate is a warning", () => {
   const result = verdict({ summary: goodSummary, boxes: ["moov", "mdat"], analysis: { black: [], freezes: [] }, spec, render: { actions: [], mustShow: [], capture: { maxGap: 0.1, motionFps: 19.9 }, console: [] } });
   assert.ok(result.warn.some((message) => message.startsWith("motion frame rate")));
 });
+
+test("each slow capture window produces a warning with its time range", () => {
+  const result = verdict({ summary: goodSummary, boxes: ["moov", "mdat"], analysis: { black: [], freezes: [] }, spec, render: { actions: [], mustShow: [], capture: { maxGap: 0.3, motionFps: 30, windows: [{ from: 1.1, to: 1.9, maxGap: 0.3 }] }, console: [] } });
+  assert.ok(result.warn.includes("capture window 1.100-1.900 s: 0.300 s gap exceeds 0.2 s"));
+});

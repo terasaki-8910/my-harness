@@ -108,21 +108,37 @@
       endY = Math.min(Math.max(0, endY), maxY);
       const set = (x, y) => container.scrollTo({ left: x, top: y, behavior: "instant" });
       const duration = Math.max(0, (options.dur || 0) * 1000);
+      const snapElements = [scroller];
+      if (isPage && document.body && getComputedStyle(document.body).scrollSnapType !== "none" && document.body !== scroller) snapElements.push(document.body);
+      const snapValues = snapElements.map((element) => element.style.scrollSnapType);
+      const disableSnap = () => snapElements.forEach((element) => { element.style.scrollSnapType = "none"; });
+      const restoreSnap = () => snapElements.forEach((element, index) => { element.style.scrollSnapType = snapValues[index]; });
+      disableSnap();
       if (duration === 0) {
-        set(endX, endY);
-        return Promise.resolve();
+        try {
+          set(endX, endY);
+          return Promise.resolve();
+        } catch (error) {
+          return Promise.reject(error);
+        } finally {
+          restoreSnap();
+        }
       }
-      return new Promise((resolve) => {
+      return new Promise((resolve, reject) => {
         const started = performance.now();
         const frame = (now) => {
-          const progress = Math.min(1, (now - started) / duration);
-          const value = easing(options.ease || "inOut", progress);
-          set(startX + (endX - startX) * value, startY + (endY - startY) * value);
-          if (progress < 1) requestAnimationFrame(frame);
-          else resolve();
+          try {
+            const progress = Math.min(1, (now - started) / duration);
+            const value = easing(options.ease || "inOut", progress);
+            set(startX + (endX - startX) * value, startY + (endY - startY) * value);
+            if (progress < 1) requestAnimationFrame(frame);
+            else resolve();
+          } catch (error) {
+            reject(error);
+          }
         };
-        requestAnimationFrame(frame);
-      });
+        try { requestAnimationFrame(frame); } catch (error) { reject(error); }
+      }).finally(restoreSnap);
     },
     visible(selectors) {
       return selectors.map((selector) => {
