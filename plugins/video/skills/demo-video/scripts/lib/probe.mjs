@@ -139,6 +139,9 @@ export function verdict({ fileError, summary, boxes = [], analysis = { black: []
       if (action.startedAt - action.at > 0.15) warn.push(`action ${action.index} ${action.do}: started ${(action.startedAt - action.at).toFixed(3)} s late`);
     }
     if ((render.capture?.maxGap ?? 0) > 0.2) warn.push(`capture gap: ${render.capture.maxGap.toFixed(3)} s exceeds 0.2 s`);
+    for (const window of render.capture?.windows ?? []) {
+      if ((window.maxGap ?? 0) > 0.2) warn.push(`capture window ${window.from.toFixed(3)}-${window.to.toFixed(3)} s: ${window.maxGap.toFixed(3)} s gap exceeds 0.2 s`);
+    }
     if (Number.isFinite(render.capture?.motionFps) && render.capture.motionFps < 20) warn.push(`motion frame rate: ${render.capture.motionFps.toFixed(1)} fps is below 20 fps`);
     if ((render.console ?? []).length > 0) warn.push(`console: ${(render.console ?? []).length} error(s)`);
   }

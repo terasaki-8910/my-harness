@@ -8,9 +8,9 @@ The scripts are in this skill's base directory. They need Node 20+, Google Chrom
 
 1. Turn the brief into checks before building. From the assignment text (and transcript, if any) write `video.json`: `checks.duration` (for "about 20 s" use [18, 22]), viewport and fps, and a `mustShow` entry with minimum seconds for every element the brief says the viewer must see. Put what no script can judge into `checks.human`.
 2. Prepare the page: a fixed 1920x1080 layout, no network requests, installed or local fonts, and a stable `id` on every element the shot list targets. Crop or mask personal data in screenshots before they go into the page.
-3. Write `timeline`: actions in time order, without overlaps. Give each idea 3-5 s, keep the result of each click on screen for at least 1.5 s, and allow about 5 Japanese characters or 3 English words per second of on-screen reading.
+3. Keep it brisk: cursor moves 0.25-0.4 s, a click's result on screen 1.2-2 s, one idea per 1.5-3 s. If a screen needs longer to read, cut words on the page instead of holding longer. Draft long, then trim: time actions with `wait` instead of `at`, set `duration` to "auto", and drop beats with `skip: true`; later beats move up by themselves. Print the plan with scripts/plan.mjs before rendering. Give a run of beats that may be cut together the same `group`, and cut it with `skipGroups`.
 4. Render: `node <base>/scripts/render.mjs video.json`. It films the real page in headless Chrome with scripted mouse and key input, draws a cursor, and encodes an H.264 MP4.
-5. Check: `node <base>/scripts/check.mjs video.json`. Fix every FAIL, at most 3 rounds for the same failure. Then look at `<out>.contact.png` (one image, tiles in time order) and at most five frames in `<out>.frames/`.
+5. Check: `node <base>/scripts/check.mjs video.json`. Fix every FAIL, at most 3 rounds for the same failure. Run `scripts/review.mjs` and read every sheet; use `--fps 15 --from a --to b` to look closely at a short range. Then look at `<out>.contact.png` (one image, tiles in time order) and at most five frames in `<out>.frames/`.
 6. Report: ask core:verifier with the two commands and the contact sheet. Give the user the NEEDS HUMAN list that check.mjs prints.
 
 Minimal video.json:

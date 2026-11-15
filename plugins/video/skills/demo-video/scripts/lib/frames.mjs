@@ -31,24 +31,27 @@ export function buildConcat(frames, { start, duration }) {
   return `${lines.join("\n")}\n`;
 }
 
-// Gaps are measured in the middle 80% of each move or scroll: at the eased ends the page moves
+// Gaps are measured in the middle 80% of each move, targeted click, or scroll: at the eased ends the page moves
 // less than a pixel per frame, and the screencast sends frames only when the page changes.
 export function captureMotionMetrics(frames, { start, actions }) {
+  const inside = (time, window) => time >= window.from - 1e-9 && time <= window.to + 1e-9;
   const windows = actions
-    .filter((action) => (action.do === "move" || action.do === "scroll") && Number.isFinite(action.startedAt) && Number.isFinite(action.endedAt) && action.endedAt > action.startedAt)
-    .map((action) => {
-      const length = Number.isFinite(action.dur) && action.dur > 0 ? action.dur : action.endedAt - action.startedAt;
-      return { start: action.startedAt + 0.1 * length, end: action.startedAt + 0.9 * length };
+    .map((action) => ({ action, length: Number.isFinite(action.dur) ? action.dur : action.endedAt - action.startedAt }))
+    .filter(({ action, length }) => (action.do === "move" || action.do === "scroll" || (action.do === "click" && action.dur > 0)) && Number.isFinite(action.startedAt) && Number.isFinite(length) && length > 0)
+    .map(({ action, length }) => {
+      return { index: action.index, do: action.do, from: action.startedAt + 0.1 * length, to: action.startedAt + 0.9 * length };
     });
-  const motionDuration = windows.reduce((sum, window) => sum + window.end - window.start, 0);
-  if (motionDuration === 0) return { maxGap: 0, motionFps: null };
-  let maxGap = 0;
   const relativeTimes = frames.map((frame) => frame.ts - start).filter(Number.isFinite);
-  const motionFrames = relativeTimes.filter((time) => windows.some((window) => time >= window.start && time <= window.end)).length;
-  for (const window of windows) {
-    const times = relativeTimes.filter((time) => time >= window.start && time <= window.end);
-    const bounded = [window.start, ...times, window.end].toSorted((a, b) => a - b);
+  const stats = windows.map((window) => {
+    const times = relativeTimes.filter((time) => inside(time, window));
+    const bounded = [window.from, ...times, window.to].toSorted((a, b) => a - b);
+    let maxGap = 0;
     for (let index = 1; index < bounded.length; index += 1) maxGap = Math.max(maxGap, bounded[index] - bounded[index - 1]);
-  }
-  return { maxGap, motionFps: motionFrames / motionDuration };
+    const duration = window.to - window.from;
+    return { ...window, frames: times.length, fps: times.length / duration, maxGap };
+  });
+  const motionDuration = stats.reduce((sum, window) => sum + window.to - window.from, 0);
+  if (motionDuration === 0) return { maxGap: 0, motionFps: null, windows: [] };
+  const motionFrames = relativeTimes.filter((time) => stats.some((window) => inside(time, window))).length;
+  return { maxGap: Math.max(0, ...stats.map((window) => window.maxGap)), motionFps: motionFrames / motionDuration, windows: stats };
 }

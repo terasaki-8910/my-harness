@@ -22,9 +22,10 @@ export function ease(name, t) {
 export const lerp = (from, to, t) => from + (to - from) * t;
 export const lerpPoint = (from, to, t) => ({ x: lerp(from.x, to.x, t), y: lerp(from.y, to.y, t) });
 
-function actionDuration(action) {
+export function actionDuration(action) {
   if (action.do === "move" || action.do === "scroll") return action.dur;
   if (action.do === "click" && action.to) return action.dur;
+  if (action.do === "wait") return action.dur;
   return 0;
 }
 
@@ -32,8 +33,12 @@ export function validate(input) {
   const errors = [];
   const source = object(input) ? input : {};
   if (!object(input)) errors.push("top level: must be an object");
-  const duration = source.duration;
-  if (!positive(duration)) errors.push("duration: must be a number greater than 0");
+  const durationSource = source.duration;
+  if (durationSource !== "auto" && !positive(durationSource)) errors.push('duration: must be a number greater than 0 or "auto"');
+  const tail = source.tail ?? 1;
+  if (durationSource === "auto") {
+    if (!finite(tail) || tail < 0) errors.push("tail: must be a non-negative number");
+  } else if (source.tail !== undefined) errors.push('tail: is only allowed when duration is "auto"');
   if (typeof source.page !== "string" || source.page.length === 0) errors.push("page: is required and must be a non-empty string");
   if (source.out !== undefined && (typeof source.out !== "string" || source.out.length === 0)) errors.push("out: must be a non-empty string");
   if (source.root !== undefined && (typeof source.root !== "string" || source.root.length === 0)) errors.push("root: must be a non-empty string");
@@ -63,23 +68,38 @@ export function validate(input) {
 
   const timelineSource = source.timeline ?? [];
   if (!Array.isArray(timelineSource)) errors.push("timeline: must be an array");
-  const timeline = (Array.isArray(timelineSource) ? timelineSource : []).map((raw, index) => {
+  const timelineItems = Array.isArray(timelineSource) ? timelineSource : [];
+  const skipGroupsSource = source.skipGroups ?? [];
+  const validSkipGroups = Array.isArray(skipGroupsSource) && skipGroupsSource.every((name) => typeof name === "string" && name.length > 0);
+  if (!validSkipGroups) errors.push("skipGroups: must be an array of non-empty strings");
+  const skipGroups = validSkipGroups ? [...skipGroupsSource] : [];
+  const actionGroups = new Set();
+  for (const [index, raw] of timelineItems.entries()) {
+    if (!object(raw) || raw.group === undefined) continue;
+    if (typeof raw.group !== "string" || raw.group.length === 0) errors.push(`action ${index} field group: must be a non-empty string`);
+    else actionGroups.add(raw.group);
+  }
+  for (const name of new Set(skipGroups)) if (!actionGroups.has(name)) errors.push(`skipGroups: no action has group "${name}"`);
+  const skippedGroupNames = new Set(skipGroups);
+  const kept = [];
+  for (const [index, raw] of timelineItems.entries()) {
     const prefix = `action ${index}`;
     if (!object(raw)) {
       errors.push(`${prefix}: must be an object`);
-      return { at: 0, do: "wait" };
+      continue;
     }
+    if (raw.skip === true || skippedGroupNames.has(raw.group)) continue;
     const action = { ...raw };
-    if (!finite(action.at) || action.at < 0) errors.push(`${prefix} field at: must be a non-negative number`);
+    if (action.at !== undefined && action.wait !== undefined) errors.push(`${prefix} fields at/wait: provide only one`);
+    if (action.at !== undefined && (!finite(action.at) || action.at < 0)) errors.push(`${prefix} field at: must be a non-negative number`);
+    if (action.wait !== undefined && (!finite(action.wait) || action.wait < 0)) errors.push(`${prefix} field wait: must be a non-negative number`);
     if (action.label !== undefined && typeof action.label !== "string") errors.push(`${prefix} field label: must be a string`);
     if (!ACTIONS.has(action.do)) {
       errors.push(`${prefix} field do: unknown action ${JSON.stringify(action.do)}`);
-      return action;
-    }
-    if (action.do === "move") {
+    } else if (action.do === "move") {
       action.anchor ??= [0.5, 0.5];
-      action.dur ??= 0.6;
-      action.ease ??= "inOut";
+      action.dur ??= 0.35;
+      action.ease ??= "out";
       const selector = typeof action.to === "string" && action.to.length > 0;
       const coordinates = finite(action.x) && finite(action.y);
       if (action.to !== undefined && !selector) errors.push(`${prefix} field to: must be a non-empty selector`);
@@ -89,8 +109,8 @@ export function validate(input) {
       if (!EASES.has(action.ease)) errors.push(`${prefix} field ease: must be linear, in, out, or inOut`);
     } else if (action.do === "click") {
       if (action.dur !== undefined && (!finite(action.dur) || action.dur < 0)) errors.push(`${prefix} field dur: must be a non-negative number`);
-      action.dur = action.to ? (action.dur ?? 0.5) : 0;
-      action.ease ??= "inOut";
+      action.dur = action.to ? (action.dur ?? 0.35) : 0;
+      action.ease ??= "out";
       action.anchor ??= [0.5, 0.5];
       if (action.to !== undefined && (typeof action.to !== "string" || action.to.length === 0)) errors.push(`${prefix} field to: must be a non-empty selector`);
       if (!EASES.has(action.ease)) errors.push(`${prefix} field ease: must be linear, in, out, or inOut`);
@@ -98,7 +118,7 @@ export function validate(input) {
     } else if (action.do === "scroll") {
       action.in ??= null;
       action.offset ??= 0;
-      action.dur ??= 0.8;
+      action.dur ??= 0.6;
       action.ease ??= "inOut";
       if (action.to !== undefined && (typeof action.to !== "string" || action.to.length === 0)) errors.push(`${prefix} field to: must be a non-empty selector`);
       if ((typeof action.to !== "string" || action.to.length === 0) && !finite(action.x) && !finite(action.y)) errors.push(`${prefix} field to/x/y: provide a selector or x and/or y`);
@@ -113,20 +133,35 @@ export function validate(input) {
       action.timeout = 5;
       if (typeof action.fn !== "string" || !/^[A-Za-z_$][\w$]*$/.test(action.fn)) errors.push(`${prefix} field fn: must be a global identifier`);
       if (!Array.isArray(action.args)) errors.push(`${prefix} field args: must be an array`);
+    } else if (action.do === "wait") {
+      action.dur ??= 0;
+      if (!finite(action.dur) || action.dur < 0) errors.push(`${prefix} field dur: must be a non-negative number`);
     }
-    return action;
-  });
+    kept.push({ action, originalIndex: index });
+  }
+
+  let previousEnd = 0;
+  for (const item of kept) {
+    const { action } = item;
+    if (!finite(action.at) || action.at < 0) action.at = previousEnd + (finite(action.wait) && action.wait >= 0 ? action.wait : 0);
+    previousEnd = action.at + (finite(actionDuration(action)) ? actionDuration(action) : 0);
+  }
+  const timeline = kept.map((item) => item.action);
+  const plannedEnd = timeline.length > 0 ? timeline.at(-1).at + actionDuration(timeline.at(-1)) : 0;
+  const duration = durationSource === "auto" ? plannedEnd + (finite(tail) && tail >= 0 ? tail : 0) : durationSource;
+  if (durationSource === "auto" && timeline.length === 0 && tail === 0) errors.push("duration: auto duration must be greater than 0");
 
   for (let index = 0; index < timeline.length; index += 1) {
     const action = timeline[index];
-    if (index > 0 && finite(action.at) && finite(timeline[index - 1].at) && action.at < timeline[index - 1].at) errors.push(`action ${index} field at: actions must be sorted by at`);
+    const originalIndex = kept[index].originalIndex;
+    if (index > 0 && finite(action.at) && finite(timeline[index - 1].at) && action.at < timeline[index - 1].at) errors.push(`action ${originalIndex} field at: actions must be sorted by at`);
     if (index > 0 && finite(action.at)) {
       const previous = timeline[index - 1];
       const previousEnd = previous.at + actionDuration(previous);
-      if (finite(previousEnd) && action.at < previousEnd) errors.push(`action ${index} field at: starts before action ${index - 1} ends at ${previousEnd}`);
+      if (finite(previousEnd) && action.at < previousEnd) errors.push(`action ${originalIndex} field at: starts before action ${kept[index - 1].originalIndex} ends at ${previousEnd}`);
     }
     const end = action.at + actionDuration(action);
-    if (positive(duration) && finite(end) && end > duration) errors.push(`action ${index} field dur: ends after duration`);
+    if (positive(duration) && finite(end) && end > duration) errors.push(`action ${originalIndex} field dur: ends after duration`);
   }
 
   const mustShowSource = source.mustShow ?? [];
@@ -160,6 +195,6 @@ export function validate(input) {
   if (!Array.isArray(checks.human) || !checks.human.every((item) => typeof item === "string")) errors.push("checks.human: must be a string array");
 
   const root = source.root ?? (typeof source.page === "string" && !/^https?:\/\//i.test(source.page) ? path.dirname(source.page) : undefined);
-  return { spec: { page: source.page, out: source.out ?? "out/video.mp4", root, viewport, fps, duration, cursor, ready, timeline, mustShow, checks }, errors };
+  return { spec: { page: source.page, out: source.out ?? "out/video.mp4", root, viewport, fps, duration, tail: durationSource === "auto" ? tail : undefined, cursor, ready, timeline, skipGroups, mustShow, checks }, errors };
 }
 

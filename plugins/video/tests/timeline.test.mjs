@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { ease, lerp, lerpPoint, validate } from "../skills/demo-video/scripts/lib/timeline.mjs";
+
+const testDirectory = path.dirname(fileURLToPath(import.meta.url));
 
 const valid = {
   page: "index.html", duration: 6,
@@ -22,13 +27,119 @@ test("valid timeline receives defaults", () => {
   assert.equal(spec.out, "out/video.mp4");
   assert.equal(spec.root, ".");
   assert.deepEqual(spec.cursor, { visible: true, size: 32, start: null });
-  assert.equal(spec.timeline[0].dur, 0.6);
-  assert.equal(spec.timeline[2].dur, 0.8);
+  assert.equal(spec.timeline[0].dur, 0.35);
+  assert.equal(spec.timeline[0].ease, "out");
+  assert.equal(spec.timeline[2].dur, 0.6);
+  assert.equal(spec.timeline[2].ease, "inOut");
   assert.deepEqual(spec.timeline[4].args, []);
   assert.deepEqual(spec.checks.duration, [5.75, 6.25]);
   assert.equal(spec.checks.blackMax, 0.5);
   assert.equal(spec.checks.maxStaticShare, 0.85);
   assert.equal(spec.checks.audio, "none");
+});
+
+test("relative waits chain from the previous planned end", () => {
+  const { spec, errors } = validate({
+    page: "x", duration: "auto", tail: 0.5,
+    timeline: [
+      { wait: 0.25, do: "move", x: 1, y: 2, dur: 0.5 },
+      { wait: 0.1, do: "click", to: "#x", dur: 0.4 },
+      { do: "wait", dur: 2 },
+      { wait: 0.2, do: "key", key: "Escape" },
+    ],
+  });
+  assert.deepEqual(errors, []);
+  assert.deepEqual(spec.timeline.map((action) => action.at), [0.25, 0.85, 1.25, 3.45]);
+  assert.equal(spec.duration, 3.95);
+  assert.deepEqual(spec.checks.duration, [3.7, 4.2]);
+});
+
+test("skipped actions are removed before timing and their other fields are ignored", () => {
+  const { spec, errors } = validate({
+    page: "x", duration: "auto",
+    timeline: [
+      { wait: 1, do: "wait", dur: 1 },
+      { skip: true, at: "bad", wait: -3, do: "unknown", dur: "bad" },
+      { wait: 0.5, do: "wait", dur: 1 },
+      { at: 8, do: "key", key: "Escape" },
+    ],
+  });
+  assert.deepEqual(errors, []);
+  assert.deepEqual(spec.timeline.map((action) => action.at), [1, 2.5, 8]);
+  assert.equal(spec.duration, 9);
+});
+
+test("skipGroups removes a whole group before resolving later relative actions", () => {
+  const { spec, errors } = validate({
+    page: "x", duration: "auto", tail: 1, skipGroups: ["tour"],
+    timeline: [
+      { wait: 0, do: "wait", dur: 1 },
+      { wait: 0, do: "wait", dur: 2, group: "tour" },
+      { wait: 0, do: "wait", dur: 3, group: "tour" },
+      { wait: 0, do: "key", key: "Escape" },
+    ],
+  });
+  assert.deepEqual(errors, []);
+  assert.deepEqual(spec.timeline.map((action) => action.at), [0, 1]);
+  assert.deepEqual(spec.skipGroups, ["tour"]);
+  assert.equal(spec.duration, 2);
+});
+
+test("group and skipGroups validation reports invalid and unused names", () => {
+  const invalidGroup = validate({ page: "x", duration: 2, timeline: [{ at: 0, do: "wait", group: 3 }] });
+  assert.ok(invalidGroup.errors.includes("action 0 field group: must be a non-empty string"));
+  const unknown = validate({ page: "x", duration: 2, skipGroups: ["missing"], timeline: [{ at: 0, do: "wait", group: "tour" }] });
+  assert.ok(unknown.errors.includes('skipGroups: no action has group "missing"'));
+  const invalidList = validate({ page: "x", duration: 2, skipGroups: [""], timeline: [] });
+  assert.ok(invalidList.errors.includes("skipGroups: must be an array of non-empty strings"));
+});
+
+test("absolute at mixes with relative wait without moving the absolute action", () => {
+  const { spec, errors } = validate({ page: "x", duration: 10, timeline: [
+    { wait: 1, do: "wait", dur: 1 },
+    { at: 5, do: "wait", dur: 1 },
+    { wait: 0.5, do: "key", key: "Escape" },
+  ] });
+  assert.deepEqual(errors, []);
+  assert.deepEqual(spec.timeline.map((action) => action.at), [1, 5, 6.5]);
+});
+
+test("auto duration uses tail and rejects an empty zero-length plan", () => {
+  assert.equal(validate({ page: "x", duration: "auto", tail: 2, timeline: [] }).spec.duration, 2);
+  const empty = validate({ page: "x", duration: "auto", tail: 0, timeline: [] });
+  assert.ok(empty.errors.some((error) => error.startsWith("duration:")));
+  const numericTail = validate({ page: "x", duration: 2, tail: 1 });
+  assert.ok(numericTail.errors.some((error) => error.startsWith("tail:")));
+});
+
+test("at and wait together is invalid and resolved relative timing still detects overlap", () => {
+  const both = validate({ page: "x", duration: 5, timeline: [{ at: 1, wait: 1, do: "wait" }] });
+  assert.ok(both.errors.some((error) => error.includes("action 0 fields at/wait")));
+  const overlap = validate({ page: "x", duration: 5, timeline: [
+    { wait: 1, do: "wait", dur: 2 },
+    { at: 2, do: "key", key: "Escape" },
+  ] });
+  assert.ok(overlap.errors.some((error) => error.includes("action 1 field at: starts before action 0 ends at 3")));
+});
+
+test("new movement defaults apply unless explicitly overridden", () => {
+  const { spec, errors } = validate({ page: "x", duration: 5, timeline: [
+    { at: 0, do: "move", x: 1, y: 2 },
+    { at: 1, do: "click", to: "#x" },
+    { at: 2, do: "scroll", y: 1 },
+    { at: 3, do: "move", x: 1, y: 2, dur: 0.9, ease: "linear" },
+  ] });
+  assert.deepEqual(errors, []);
+  assert.deepEqual(spec.timeline.map(({ dur, ease }) => [dur, ease]), [[0.35, "out"], [0.35, "out"], [0.6, "inOut"], [0.9, "linear"]]);
+});
+
+test("existing examples keep their explicit start times", () => {
+  for (const name of ["video.json", "video-20s.json"]) {
+    const raw = JSON.parse(fs.readFileSync(path.join(testDirectory, "..", "examples", "basic", name), "utf8"));
+    const { spec, errors } = validate(raw);
+    assert.deepEqual(errors, [], name);
+    assert.deepEqual(spec.timeline.map((action) => action.at), raw.timeline.map((action) => action.at), name);
+  }
 });
 
 test("timeline reports field, ordering, overlap and duration errors with action indexes", () => {

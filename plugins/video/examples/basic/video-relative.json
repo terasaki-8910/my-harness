@@ -1,0 +1,21 @@
+{
+  "page": "index.html",
+  "out": "out/basic-relative.mp4",
+  "duration": "auto",
+  "fps": 30,
+  "cursor": { "start": [960, 760] },
+  "timeline": [
+    { "wait": 0.5, "do": "move", "to": "#card-1", "label": "point at card 1" },
+    { "wait": 0.15, "do": "click", "label": "open card 1" },
+    { "wait": 1.2, "do": "wait", "dur": 1.0, "label": "hold the result" },
+    { "wait": 0, "do": "key", "key": "Escape", "label": "close" },
+    { "wait": 0.8, "do": "click", "to": "#card-3", "skip": true, "label": "optional card" },
+    { "wait": 0.8, "do": "scroll", "to": "#more", "label": "scroll down" },
+    { "wait": 1.2, "do": "scroll", "y": 0, "label": "back to top" },
+    { "wait": 1.0, "do": "click", "to": "#card-2", "label": "open card 2" }
+  ],
+  "mustShow": [
+    { "selector": "#detail", "min": 1, "label": "click result" },
+    { "selector": "#more", "min": 1 }
+  ]
+}
