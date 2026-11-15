@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>スライドのタイトル</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="topbar-title" href="#title">スライドのタイトル</a>
+    <nav class="topnav" aria-label="スライド">
+      <ol>
+        <li><a href="#title">表紙</a></li>
+        <li><a href="#figure">図</a></li>
+        <li><a href="#list">要点</a></li>
+        <li><a href="#message">結論</a></li>
+        <li><a href="#closing">終了</a></li>
+      </ol>
+    </nav>
+  </header>
+
+  <main>
+    <section class="slide title-slide" id="title">
+      <h1>一枚につき、ひとつのメッセージ</h1>
+      <p class="lead">ここに発表の要旨を一文で置きます。</p>
+    </section>
+
+    <section class="slide" id="figure">
+      <h2>関係をひと目で示す</h2>
+      <figure class="figure-placeholder">
+        <svg viewBox="0 0 960 360" role="img" aria-labelledby="figure-title figure-desc">
+          <title id="figure-title">三つの要素を結ぶ図のプレースホルダー</title>
+          <desc id="figure-desc">左から右へ三つの円が線で結ばれています。</desc>
+          <path d="M210 180H750" class="figure-line"/>
+          <circle cx="210" cy="180" r="74" class="figure-node"/>
+          <circle cx="480" cy="180" r="74" class="figure-node figure-node-accent"/>
+          <circle cx="750" cy="180" r="74" class="figure-node"/>
+          <text x="210" y="190">要素 A</text>
+          <text x="480" y="190" class="figure-text-on-accent">要素 B</text>
+          <text x="750" y="190">要素 C</text>
+        </svg>
+        <figcaption>図が伝える内容を短く補足します。</figcaption>
+      </figure>
+    </section>
+
+    <section class="slide" id="list">
+      <h2>三つの観点に絞る</h2>
+      <ol class="point-list">
+        <li><span>01</span><strong>最初の要点を短く書く</strong></li>
+        <li><span>02</span><strong>次の要点を短く書く</strong></li>
+        <li><span>03</span><strong>最後の要点を短く書く</strong></li>
+      </ol>
+    </section>
+
+    <section class="slide message-slide" id="message">
+      <h2>覚えてほしい一文を、ここに置きます。</h2>
+    </section>
+
+    <section class="slide closing-slide" id="closing">
+      <h2>ありがとうございました。</h2>
+      <p class="credits">図版・資料：出典をここにまとめます。</p>
+    </section>
+  </main>
+</body>
+</html>
