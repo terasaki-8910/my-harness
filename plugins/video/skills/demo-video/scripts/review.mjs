@@ -6,7 +6,7 @@ import { attachPage } from "./lib/cdp.mjs";
 import { findChrome, findFfmpeg, launchChrome, runProcess } from "./lib/chrome.mjs";
 import { sheetHtml } from "./lib/review.mjs";
 import { startServer } from "./lib/server.mjs";
-import { validate } from "./lib/timeline.mjs";
+import { resolveVariant, validate } from "./lib/timeline.mjs";
 
 function number(argument, name, { positive = false } = {}) {
   const value = Number(argument);
@@ -15,18 +15,19 @@ function number(argument, name, { positive = false } = {}) {
 }
 
 function parseArguments(argv) {
-  const result = { config: null, file: null, fps: 4, from: null, to: null };
+  const result = { config: null, file: null, variant: null, fps: 4, from: null, to: null };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--file") result.file = argv[++index];
+    else if (argument === "--variant") result.variant = argv[++index];
     else if (argument === "--fps") result.fps = number(argv[++index], "--fps", { positive: true });
     else if (argument === "--from") result.from = number(argv[++index], "--from");
     else if (argument === "--to") result.to = number(argv[++index], "--to");
     else if (!result.config) result.config = argument;
     else throw new Error(`Unknown argument: ${argument}`);
-    if (["--file", "--fps", "--from", "--to"].includes(argument) && argv[index] === undefined) throw new Error(`${argument} needs a value`);
+    if (["--file", "--variant", "--fps", "--from", "--to"].includes(argument) && argv[index] === undefined) throw new Error(`${argument} needs a value`);
   }
-  if (!result.config) throw new Error("Usage: review.mjs <video.json> [--file x.mp4] [--fps 4] [--from s] [--to s]");
+  if (!result.config) throw new Error("Usage: review.mjs <video.json> [--variant name] [--file x.mp4] [--fps 4] [--from s] [--to s]");
   if (result.from !== null && result.to !== null && result.to <= result.from) throw new Error("--to must be greater than --from");
   return result;
 }
@@ -60,7 +61,8 @@ async function main() {
   const args = parseArguments(process.argv.slice(2));
   const configPath = path.resolve(args.config);
   const configDirectory = path.dirname(configPath);
-  const { spec, errors } = validate(JSON.parse(await fs.promises.readFile(configPath, "utf8")));
+  const raw = JSON.parse(await fs.promises.readFile(configPath, "utf8"));
+  const { spec, errors } = validate(resolveVariant(raw, args.variant));
   if (errors.length > 0) {
     for (const error of errors) process.stderr.write(`video.json: ${error}\n`);
     process.exitCode = 1;

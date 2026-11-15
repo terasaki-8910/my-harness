@@ -12,6 +12,10 @@ The scripts are in this skill's base directory. They need Node 20+, Google Chrom
 4. Render: `node <base>/scripts/render.mjs video.json`. It films the real page in headless Chrome with scripted mouse and key input, draws a cursor, and encodes an H.264 MP4.
 5. Check: `node <base>/scripts/check.mjs video.json`. Fix every FAIL, at most 3 rounds for the same failure. Run `scripts/review.mjs` and read every sheet; use `--fps 15 --from a --to b` to look closely at a short range. Then look at `<out>.contact.png` (one image, tiles in time order) and at most five frames in `<out>.frames/`.
 6. Report: ask core:verifier with the two commands and the contact sheet. Give the user the NEEDS HUMAN list that check.mjs prints.
+Move between sections with a fixed-duration scroll in the page's script, not CSS smooth scroll; later input can stop browser smooth scrolling and stall a tour.
+Mark prose that must be read with `"read": true`.
+Declare cut versions as variants and pass `--variant` to plan, render, check, and review.
+If the page is also a deliverable, pack it and open the packed file alone.
 
 Minimal video.json:
 

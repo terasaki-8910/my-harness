@@ -140,22 +140,26 @@
         try { requestAnimationFrame(frame); } catch (error) { reject(error); }
       }).finally(restoreSnap);
     },
-    visible(selectors) {
+    inspect(selectors) {
       return selectors.map((selector) => {
         const element = document.querySelector(selector);
-        if (!element) return false;
+        if (!element) return { visible: false, chars: 0 };
         const style = getComputedStyle(element);
-        if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) <= 0.1) return false;
+        if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) <= 0.1) return { visible: false, chars: 0 };
         const rect = element.getBoundingClientRect();
-        if (rect.width <= 0 || rect.height <= 0) return false;
+        if (rect.width <= 0 || rect.height <= 0) return { visible: false, chars: 0 };
         const visibleWidth = Math.max(0, Math.min(rect.right, innerWidth) - Math.max(rect.left, 0));
         const visibleHeight = Math.max(0, Math.min(rect.bottom, innerHeight) - Math.max(rect.top, 0));
         const visibleArea = visibleWidth * visibleHeight;
         const ownArea = rect.width * rect.height;
         const viewportArea = innerWidth * innerHeight;
         const denominator = ownArea > viewportArea ? viewportArea : ownArea;
-        return visibleArea >= denominator * 0.5;
+        const text = typeof element.innerText === "string" ? element.innerText : "";
+        return { visible: visibleArea >= denominator * 0.5, chars: [...text.replace(/\s/gu, "")].length };
       });
+    },
+    visible(selectors) {
+      return this.inspect(selectors).map((item) => item.visible);
     },
   };
 })();

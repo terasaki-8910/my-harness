@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mp4BoxOrder, parseAnalysis, parseMp4Boxes, summarizeFfprobe, verdict } from "../skills/demo-video/scripts/lib/probe.mjs";
+import { mp4BoxOrder, parseAnalysis, parseMp4Boxes, readingTimeWarning, summarizeFfprobe, verdict } from "../skills/demo-video/scripts/lib/probe.mjs";
 
 function box(type, payloadSize = 0, wide = false) {
   const header = wide ? 16 : 8;
@@ -63,4 +63,18 @@ test("low motion frame rate is a warning", () => {
 test("each slow capture window produces a warning with its time range", () => {
   const result = verdict({ summary: goodSummary, boxes: ["moov", "mdat"], analysis: { black: [], freezes: [] }, spec, render: { actions: [], mustShow: [], capture: { maxGap: 0.3, motionFps: 30, windows: [{ from: 1.1, to: 1.9, maxGap: 0.3 }] }, console: [] } });
   assert.ok(result.warn.includes("capture window 1.100-1.900 s: 0.300 s gap exceeds 0.2 s"));
+});
+
+test("reading-time warning is opt-in and uses entry, check, then Japanese default CPS", () => {
+  const base = { selector: "#copy", label: "copy", read: true, chars: 24, visibleSec: 1 };
+  assert.equal(readingTimeWarning({ ...base, readingCps: 12 }, { readingCps: 6 }), "mustShow copy: 24 characters need about 2.0 s at 12 chars/s; on screen 1.00 s");
+  assert.match(readingTimeWarning(base, { readingCps: 6 }), /about 4\.0 s at 6 chars\/s/);
+  assert.match(readingTimeWarning(base), /about 3\.0 s at 8 chars\/s/);
+  assert.equal(readingTimeWarning({ ...base, read: false }), null);
+  assert.equal(readingTimeWarning({ ...base, visibleSec: 3 }), null);
+});
+
+test("passing mustShow result uses the public PASS line format", () => {
+  const result = verdict({ summary: goodSummary, boxes: ["moov", "mdat"], analysis: { black: [], freezes: [] }, spec, render: { actions: [], mustShow: [{ selector: "#x", label: "hero", min: 2, visibleSec: 2.345 }], capture: {}, console: [] } });
+  assert.ok(result.pass.includes("mustShow hero: 2.35 s (min 2 s)"));
 });

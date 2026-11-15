@@ -4,18 +4,21 @@ import path from "node:path";
 import { findFfmpeg, runProcess } from "./lib/chrome.mjs";
 import { mp4BoxOrder, parseAnalysis, summarizeFfprobe, verdict } from "./lib/probe.mjs";
 import { findFont, hasDrawtext, reviewFilter } from "./lib/review.mjs";
-import { validate } from "./lib/timeline.mjs";
+import { resolveVariant, validate } from "./lib/timeline.mjs";
 
 function parseArguments(argv) {
-  const result = { config: null, file: null };
+  const result = { config: null, file: null, variant: null };
   for (let index = 0; index < argv.length; index += 1) {
     if (argv[index] === "--file") {
       result.file = argv[++index];
       if (!result.file) throw new Error("--file needs an MP4 path");
+    } else if (argv[index] === "--variant") {
+      result.variant = argv[++index];
+      if (!result.variant) throw new Error("--variant needs a name");
     } else if (!result.config) result.config = argv[index];
     else throw new Error(`Unknown argument: ${argv[index]}`);
   }
-  if (!result.config) throw new Error("Usage: check.mjs <video.json> [--file mp4]");
+  if (!result.config) throw new Error("Usage: check.mjs <video.json> [--variant name] [--file mp4]");
   return result;
 }
 
@@ -30,7 +33,8 @@ async function main() {
   const args = parseArguments(process.argv.slice(2));
   const configPath = path.resolve(args.config);
   const configDirectory = path.dirname(configPath);
-  const { spec, errors } = validate(JSON.parse(await fs.promises.readFile(configPath, "utf8")));
+  const raw = JSON.parse(await fs.promises.readFile(configPath, "utf8"));
+  const { spec, errors } = validate(resolveVariant(raw, args.variant));
   if (errors.length > 0) {
     for (const error of errors) process.stderr.write(`video.json: ${error}\n`);
     process.exitCode = 1;

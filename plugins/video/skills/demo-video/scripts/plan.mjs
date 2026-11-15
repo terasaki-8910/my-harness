@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
-import { actionDuration, validate } from "./lib/timeline.mjs";
+import { actionDuration, resolveVariant, validate } from "./lib/timeline.mjs";
 
 function detail(action) {
   if (action.to) return action.to;
@@ -13,10 +13,20 @@ function detail(action) {
 
 async function main() {
   const args = process.argv.slice(2);
-  if (args.length !== 1) throw new Error("Usage: plan.mjs <video.json>");
-  const configPath = path.resolve(args[0]);
+  let file;
+  let variant = null;
+  for (let index = 0; index < args.length; index += 1) {
+    if (args[index] === "--variant") {
+      variant = args[++index];
+      if (!variant) throw new Error("--variant needs a name");
+    } else if (!file) file = args[index];
+    else throw new Error(`Unknown argument: ${args[index]}`);
+  }
+  if (!file) throw new Error("Usage: plan.mjs <video.json> [--variant name]");
+  const configPath = path.resolve(file);
   const raw = JSON.parse(await fs.promises.readFile(configPath, "utf8"));
-  const { spec, errors } = validate(raw);
+  const resolved = resolveVariant(raw, variant);
+  const { spec, errors } = validate(resolved);
   if (errors.length > 0) {
     for (const error of errors) process.stderr.write(`video.json: ${error}\n`);
     process.exitCode = 1;
@@ -28,7 +38,7 @@ async function main() {
     process.stdout.write(`${action.at.toFixed(2)}-${end.toFixed(2)}  ${action.do}  ${detail(action)}  ${annotation}\n`);
   }
   const skippedGroups = new Set(spec.skipGroups);
-  const skipped = (raw.timeline ?? []).filter((action) => action && typeof action === "object" && !Array.isArray(action) && (action.skip === true || skippedGroups.has(action.group))).length;
+  const skipped = (resolved.timeline ?? []).filter((action) => action && typeof action === "object" && !Array.isArray(action) && (action.skip === true || skippedGroups.has(action.group))).length;
   process.stdout.write(`duration ${spec.duration.toFixed(2)} s; skipped ${skipped} action(s); skipped groups: ${spec.skipGroups.join(", ") || "none"}\n`);
 }
 
