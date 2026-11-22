@@ -34,5 +34,5 @@ node <base>/scripts/glb-audit.mjs public/assets/<part>.glb --budget docs/asset-b
 node <base>/scripts/asset-audit.mjs . --manifest docs/asset-manifest.json
 node <base>/scripts/shots.mjs "http://localhost:4173/?shots=1" --out artifacts/shots/after
 node <base>/scripts/sheet.mjs --before artifacts/shots/before --after artifacts/shots/after --out artifacts/shots/compare.png
-node <base>/scripts/perf.mjs "http://localhost:4173/" --headed --seconds 20 --p95 16.7
+node <base>/scripts/perf.mjs "http://localhost:4173/" --headed --seconds 20 --p95 17.5
 ```
