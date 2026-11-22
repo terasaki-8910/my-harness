@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>page errors</title>
+<style>html,body{margin:0;height:100%;overflow:hidden}body{background:linear-gradient(90deg,#101830,#f0c060)}</style>
+</head>
+<body>
+<script>
+console.error("fixture console error");
+setTimeout(() => { throw new Error("fixture uncaught error"); }, 0);
+window.__shots = {
+  ready: () => true,
+  list: () => ["grad"],
+  show() {},
+};
+</script>
+</body>
+</html>
