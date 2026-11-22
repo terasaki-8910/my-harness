@@ -66,6 +66,7 @@ window.__shots = {
 - Blank-frame checks use whole-frame statistics, so a partial failure cannot be seen by them: for example black floors under a good sky (a headless D3D11 capture with black floors passed `frames.mjs`). Judge such captures on the review sheet or cross-check with a headed run.
 - `perf.mjs` numbers depend on which GPU Chrome uses on machines with more than one; read the renderer line.
 - The `art-reviewer` agent has not yet been compared with a person's judgement on a fixed set of shots.
+- Text contrast measured from element boxes includes borders and empty space and reports false failures; measure from the text node's own rects clipped to its element.
 - In Git Bash on Windows, a long heredoc containing apostrophes or backticks passed through a tool's shell wrapper broke ("unexpected EOF"); write long inputs to a file and redirect it instead.
 
 ## Lessons

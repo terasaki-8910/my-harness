@@ -12,6 +12,11 @@ Judge every fixed shot against the brief and its three reference images. Each cr
 
 Fun, game feel and taste at the real display size are NEEDS HUMAN.
 
+Process notes from FOLD / CITY (2026-11-23):
+- The maker's own review twice reported items as met that a fresh reviewer measured as failing (value order, the hanging city). Keep the independent review mandatory, and use a fresh reviewer each round so it is not anchored on its earlier findings.
+- Ask the reviewer for measured evidence (pixel coordinates, L* or V values, ratios) and for the single most "cheap" element. The second question finds the next fix faster than the criteria list.
+- Review shots that never run the animation show the rest pose. Cloth, hover and walk motion are NEEDS HUMAN unless frames in motion are captured.
+
 How to review well:
 - Read the brief and the references before the shots.
 - Assume there are problems and look for them; a shot that "looks fine" has not been reviewed yet.
