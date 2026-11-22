@@ -81,7 +81,7 @@ This creates `AGENTS.md`, `CLAUDE.md` (which imports `AGENTS.md`), `.claude/sett
 
 ## Measure, then add
 
-The video and slides domain plugins are documented in [`plugins/video/README.md`](plugins/video/README.md) and [`plugins/slides/README.md`](plugins/slides/README.md).
+The video, slides and game3d domain plugins are documented in [`plugins/video/README.md`](plugins/video/README.md), [`plugins/slides/README.md`](plugins/slides/README.md) and [`plugins/game3d/README.md`](plugins/game3d/README.md).
 
 Following the guide:
 
