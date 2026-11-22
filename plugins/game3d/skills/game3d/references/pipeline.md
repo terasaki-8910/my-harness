@@ -49,6 +49,16 @@ Visual inspection does not find these reliably. One published Blender MCP build 
 - Pixel values read from 8-bit images in bpy are sRGB-encoded, not linear; convert before doing maths on them.
 - On a Windows checkout with `core.autocrlf`, patch scripts that search for multi-line LF strings find nothing and silently change nothing. Make every scripted edit assert that its pattern was found.
 
+- Blender's normal recalculation can turn a flat sheet face-down; it then exports back-face culled and is invisible in the engine. Check the face direction of single-sided pieces after recalculating normals.
+- A relative output path given to a script can resolve against the drive root inside Blender (a stray `C:rtifacts` appeared once). Resolve every output path to an absolute one from the script's own location.
+- After changing a shared constant or helper, rebuild every GLB that uses it and byte-compare the results; a stale file is otherwise invisible until someone looks closely.
+- Scripts that reach into another script's private helpers break when that file changes in a parallel branch. Promote shared helpers to a public module, or copy them.
+
+## Textures that tile
+
+- Bake a joint along the edge of a tileable texture (grout lines, panel seams), so every cell can be rotated by quarter turns. That breaks the visible repeat without seams.
+- A generated stone-course texture with more than about 12 % block contrast reads as a checkerboard at distance; keep the contrast low and let the form carry the detail.
+
 ## Export and after
 
 `bpy.ops.export_scene.gltf(filepath=..., export_format='GLB', export_apply=True, export_yup=True)` with the options checked as above. Then `glb-audit.mjs` against the budget, `asset-audit.mjs`, and the game's own fixed shots.
