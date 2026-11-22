@@ -43,6 +43,12 @@ Fail the script (raise) when:
 - a textured mesh has no UVs, or there are zero-area faces or non-manifold edges on closed parts.
 Visual inspection does not find these reliably. One published Blender MCP build (a café interior, 2026-10) reported 45 intersections among 326 props that only a scripted check found.
 
+## Traps seen in practice
+
+- The glTF exporter may pack baked AO (on UV1) and roughness (on UV0) into one image. Check `occlusionTexture.index` and `occlusionTexture.texCoord` in the exported JSON, and that the engine reads AO from the intended UV set.
+- Pixel values read from 8-bit images in bpy are sRGB-encoded, not linear; convert before doing maths on them.
+- On a Windows checkout with `core.autocrlf`, patch scripts that search for multi-line LF strings find nothing and silently change nothing. Make every scripted edit assert that its pattern was found.
+
 ## Export and after
 
 `bpy.ops.export_scene.gltf(filepath=..., export_format='GLB', export_apply=True, export_yup=True)` with the options checked as above. Then `glb-audit.mjs` against the budget, `asset-audit.mjs`, and the game's own fixed shots.
