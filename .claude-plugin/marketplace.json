@@ -18,6 +18,11 @@
       "name": "slides",
       "source": "./plugins/slides",
       "description": "One-message-per-screen HTML slides: starter page, browser checks, review sheets."
+    },
+    {
+      "name": "game3d",
+      "source": "./plugins/game3d",
+      "description": "3D game art pipeline: headless Blender runs, GLB budget and asset licence audits, fixed-camera shots with blank-frame checks."
     }
   ]
 }

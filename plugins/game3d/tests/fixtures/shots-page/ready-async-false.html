@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>async ready never true</title>
+<style>html,body{margin:0;height:100%;overflow:hidden}body{background:linear-gradient(90deg,#101830,#f0c060)}</style>
+</head>
+<body>
+<script>
+// A Promise is truthy, so a plain `if (ready())` takes this page for ready; it resolves false for ever.
+window.__shots = {
+  ready: async () => false,
+  list: () => ["grad"],
+  show() {},
+};
+</script>
+</body>
+</html>

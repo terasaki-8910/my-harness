@@ -7,3 +7,4 @@ node_modules/
 !.env.sample
 !.env.template
 plugins/video/examples/*/out/
+.scratch/
