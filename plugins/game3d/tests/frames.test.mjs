@@ -145,16 +145,88 @@ test("frames.mjs scans directories without recursion, prints JSON and takes thre
     const parsed = JSON.parse(result.stdout);
     assert.deepEqual(parsed.map((item) => [path.basename(item.file), item.blank]), [["a-grey.png", "uniform"], ["b-black.png", "black"], ["c-checker.PNG", null]]);
     assert.deepEqual(Object.keys(parsed[0]), ["file", "stats", "blank"]);
-    assert.deepEqual(Object.keys(parsed[0].stats), ["mean", "std", "white", "black"]);
+    assert.deepEqual(Object.keys(parsed[0].stats), ["mean", "std", "white", "black", "mode"]);
     assert.equal(parsed[0].file.includes("\\"), false);
 
-    const loose = run([path.join(directory, "a-grey.png"), "--min-std", "0"]);
+    // a uniform frame is flat as well, so loosening --min-std needs a frame that varies a little (levels 120..127)
+    const faint = path.join(directory, "faint.png");
+    fs.writeFileSync(faint, encodeRgb(image(64, 64, 3, (x) => [120 + (x >> 3), 120 + (x >> 3), 120 + (x >> 3)])));
+    assert.equal(run([faint]).status, 1);
+    const loose = run([faint, "--min-std", "0"]);
     assert.equal(loose.status, 0, loose.stdout);
+    assert.equal(run([path.join(directory, "a-grey.png"), "--min-std", "0"]).status, 1, "a uniform frame is still flat");
     const strict = run([path.join(directory, "c-checker.PNG"), "--max-flat", "0.5"]);
     assert.equal(strict.status, 1);
     assert.match(strict.stdout, /^FAIL .* white /);
     const empty = fs.mkdtempSync(path.join(os.tmpdir(), "game3d-frames-empty-"));
     try { assert.equal(run([empty]).status, 2); } finally { fs.rmSync(empty, { recursive: true, force: true }); }
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+// A frame of one colour with a small dark box on it, like a whited-out WebGL canvas with a HUD element.
+const withBox = (base, boxColour = [40, 40, 48]) => image(64, 64, 3, (x, y) => (x >= 4 && x < 20 && y >= 52 && y < 60 ? boxColour : base));
+
+test("frameStats reports the share of samples within +-2 levels of the most common level", () => {
+  assert.equal(frameStats(white()).mode, 1);
+  assert.equal(frameStats(grey()).mode, 1);
+  assert.equal(frameStats(checkerboard()).mode, 0.5);
+  // levels 98..102 are all within 2 of the most common level 100; 103 is not
+  const bands = (offset) => image(64, 64, 1, (x) => [x < 40 ? 100 : 100 + offset]);
+  assert.equal(frameStats(bands(2)).mode, 1);
+  assert.equal(frameStats(bands(-2)).mode, 1);
+  assert.ok(Math.abs(frameStats(bands(3)).mode - 40 / 64) < 1e-9);
+  // the share is taken around the single most common level, wherever it is in the range
+  assert.equal(frameStats(image(8, 8, 1, () => [0])).mode, 1);
+  assert.equal(frameStats(image(8, 8, 1, () => [255])).mode, 1);
+});
+
+test("a whited-out frame with a small HUD box is flat, and a frame with real content is not", () => {
+  const whiteWithBox = frameStats(withBox([255, 255, 255]));
+  assert.ok(whiteWithBox.white < 0.98, "the box keeps the white share under maxFlat");
+  assert.ok(whiteWithBox.std >= 0.02, "and the std above minStd");
+  assert.equal(blankReason(whiteWithBox), "flat");
+  assert.equal(blankReason(frameStats(withBox([0, 0, 0], [220, 220, 220]))), "flat");
+  assert.equal(blankReason(frameStats(withBox([120, 130, 140]))), "flat");
+  // white, black and uniform are decided first
+  assert.equal(blankReason(frameStats(white())), "white");
+  assert.equal(blankReason(frameStats(black())), "black");
+  assert.equal(blankReason(frameStats(grey())), "uniform");
+  assert.equal(blankReason({ mean: 0.5, std: 0.1, white: 0.98, black: 0, mode: 1 }), "white");
+  assert.equal(blankReason({ mean: 0.5, std: 0.0, white: 0, black: 0, mode: 1 }), "uniform");
+  // a busy frame passes, the threshold is inclusive and adjustable
+  assert.equal(blankReason(frameStats(checkerboard())), null);
+  assert.equal(blankReason({ mean: 0.5, std: 0.1, white: 0, black: 0, mode: 0.9 }), "flat");
+  assert.equal(blankReason({ mean: 0.5, std: 0.1, white: 0, black: 0, mode: 0.899 }), null);
+  assert.equal(blankReason({ mean: 0.5, std: 0.1, white: 0, black: 0, mode: 0.95 }, { maxMode: 0.96 }), null);
+  assert.equal(blankReason({ mean: 0.5, std: 0.1, white: 0, black: 0, mode: 0.6 }, { maxMode: 0.5 }), "flat");
+});
+
+test("frames.mjs prints flat for a whited-out frame with a HUD box and takes --max-mode", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "game3d-frames-"));
+  try {
+    const pure = path.join(directory, "1-white.png");
+    const boxed = path.join(directory, "2-white-with-box.png");
+    const busy = path.join(directory, "3-busy.png");
+    fs.writeFileSync(pure, encodeRgb(white()));
+    fs.writeFileSync(boxed, encodeRgb(withBox([255, 255, 255])));
+    fs.writeFileSync(busy, encodeRgb(checkerboard()));
+
+    const json = run([directory, "--json"]);
+    assert.equal(json.status, 1, json.stderr);
+    const parsed = JSON.parse(json.stdout);
+    assert.deepEqual(parsed.map((item) => [path.basename(item.file), item.blank]), [["1-white.png", "white"], ["2-white-with-box.png", "flat"], ["3-busy.png", null]]);
+    assert.deepEqual(Object.keys(parsed[1].stats), ["mean", "std", "white", "black", "mode"]);
+
+    const text = run([boxed]);
+    assert.equal(text.status, 1);
+    assert.match(text.stdout, /^FAIL .*2-white-with-box\.png flat mean=0\.\d{3} std=0\.\d{3}\n$/);
+    const lenient = run([boxed, "--max-mode", "1"]);
+    assert.equal(lenient.status, 0, lenient.stdout);
+    assert.equal(run([busy, "--max-mode", "0.4"]).status, 1, "a threshold below the busy frame's own mode share flags it");
+    assert.equal(run([busy, "--max-mode", "2"]).status, 2);
+    assert.equal(run([busy, "--max-mode"]).status, 2);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }

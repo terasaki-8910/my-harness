@@ -9,6 +9,9 @@
 // A script runs as: <blender> --background --factory-startup --python-exit-code 1
 //   --python <script.py> -- <script arguments>   (read them in Python after "--" in sys.argv)
 // Blender's stdout and stderr stream to the terminal and, with --log, to that file too.
+// The result follows Blender's own exit, not the closing of its output pipes: after Blender has exited its
+// pipes get 2 s to end; if a process the script started (a helper, a server) still holds them, a
+// "blender: WARN ..." line is written, the pipes are closed and that process is not waited for or killed.
 // Search order: --blender, env BLENDER_BIN, platform defaults (Windows: every
 // "Program Files/Blender Foundation/Blender *" folder, newest first), then PATH.
 //

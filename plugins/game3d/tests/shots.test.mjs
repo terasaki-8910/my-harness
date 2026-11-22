@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { EventEmitter } from "node:events";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test, { after, before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { findChrome } from "../skills/game3d/scripts/lib/chrome.mjs";
-import { backendArgs, parseNumber, parseSize, resolveBackend } from "../skills/game3d/scripts/lib/page.mjs";
+import { backendArgs, createCleanupRegistry, parseNumber, parseSize, resolveBackend, watchPage } from "../skills/game3d/scripts/lib/page.mjs";
 import { decodePng } from "../skills/game3d/scripts/lib/png.mjs";
 import { startServer } from "../skills/game3d/scripts/lib/server.mjs";
 import { compareHtml, pairShots, safeFilePart, sheetHtml } from "../skills/game3d/scripts/lib/sheet.mjs";
@@ -80,6 +81,174 @@ test("sheet HTML escapes captions, shows notes and the word missing", () => {
   assert.match(compare, /Row/);
 });
 
+function fakeCdp() {
+  const handlers = new Map();
+  return {
+    on(method, handler) {
+      const set = handlers.get(method) ?? new Set();
+      set.add(handler);
+      handlers.set(method, set);
+      return () => set.delete(handler);
+    },
+    emit(method, params, sessionId = "S") {
+      for (const handler of handlers.get(method) ?? []) handler(params, sessionId);
+    },
+    count(method) { return handlers.get(method)?.size ?? 0; },
+  };
+}
+
+test("watchPage records failed loads, HTTP errors and Log errors once per URL, with URL and status", () => {
+  const cdp = fakeCdp();
+  const diagnostics = watchPage(cdp, "S");
+  const request = (requestId, url) => cdp.emit("Network.requestWillBeSent", { requestId, request: { url } });
+  request("1", "http://h/a.png");
+  cdp.emit("Network.responseReceived", { requestId: "1", response: { url: "http://h/a.png", status: 404, statusText: "Not Found" } });
+  // Chrome also logs the same 404 as a Log entry: not a second error
+  cdp.emit("Log.entryAdded", { entry: { source: "network", level: "error", text: "Failed to load resource: the server responded with a status of 404 (Not Found)", url: "http://h/a.png" } });
+  request("2", "http://h/b.glb");
+  cdp.emit("Network.loadingFailed", { requestId: "2", errorText: "net::ERR_CONNECTION_REFUSED", canceled: false });
+  request("3", "http://h/c.png");
+  cdp.emit("Network.loadingFailed", { requestId: "3", errorText: "net::ERR_ABORTED", canceled: true });
+  request("4", "http://h/ok.png");
+  cdp.emit("Network.responseReceived", { requestId: "4", response: { url: "http://h/ok.png", status: 200 } });
+  cdp.emit("Network.responseReceived", { requestId: "5", response: { url: "http://h/redirect", status: 302 } });
+  // a Log error that only the Log domain saw
+  cdp.emit("Log.entryAdded", { entry: { source: "network", level: "error", text: "Failed to load resource: the server responded with a status of 500 ()", url: "http://h/d.bin" } });
+  cdp.emit("Log.entryAdded", { entry: { source: "javascript", level: "warning", text: "just a warning", url: "http://h/e.js" } });
+  cdp.emit("Log.entryAdded", { entry: { source: "security", level: "error", text: "mixed content" } });
+  cdp.emit("Log.entryAdded", { entry: { source: "security", level: "error", text: "mixed content" } });
+  cdp.emit("Runtime.consoleAPICalled", { type: "error", args: [{ value: "boom" }, { description: "Error: x" }] });
+  cdp.emit("Runtime.consoleAPICalled", { type: "log", args: [{ value: "fine" }] });
+  cdp.emit("Runtime.exceptionThrown", { exceptionDetails: { text: "Uncaught", exception: { description: "Error: thrown" } } });
+  // another session's events are not ours
+  cdp.emit("Network.responseReceived", { requestId: "9", response: { url: "http://h/other.png", status: 404 } }, "OTHER");
+
+  assert.deepEqual(diagnostics.networkErrors, [
+    { kind: "http", url: "http://h/a.png", status: 404, text: "Not Found" },
+    { kind: "failed", url: "http://h/b.glb", status: null, text: "net::ERR_CONNECTION_REFUSED" },
+    { kind: "log", url: "http://h/d.bin", status: 500, text: "Failed to load resource: the server responded with a status of 500 ()" },
+  ]);
+  assert.deepEqual(diagnostics.errors, [
+    "HTTP 404 http://h/a.png",
+    "request failed (net::ERR_CONNECTION_REFUSED) http://h/b.glb",
+    "Failed to load resource: the server responded with a status of 500 () (http://h/d.bin)",
+    "mixed content",
+    "boom Error: x",
+    "Error: thrown",
+  ]);
+});
+
+test("watchPage ignores /favicon.ico and URLs containing an ignored substring, and stop() unsubscribes", () => {
+  const cdp = fakeCdp();
+  const diagnostics = watchPage(cdp, "S", { ignoreUrl: ["optional-player.vrm", "/legacy/"] });
+  const notFound = (url) => cdp.emit("Network.responseReceived", { requestId: url, response: { url, status: 404 } });
+  notFound("http://h/favicon.ico");
+  notFound("http://h/sub/favicon.ico?v=2");
+  cdp.emit("Log.entryAdded", { entry: { source: "network", level: "error", text: "Failed to load resource: 404", url: "http://h/favicon.ico" } });
+  notFound("http://h/models/optional-player.vrm");
+  notFound("http://h/legacy/x.png");
+  assert.deepEqual(diagnostics.errors, []);
+  notFound("http://h/favicon.icon");
+  notFound("http://h/models/player.vrm");
+  assert.deepEqual(diagnostics.networkErrors.map((item) => item.url), ["http://h/favicon.icon", "http://h/models/player.vrm"]);
+  diagnostics.stop();
+  assert.equal(cdp.count("Network.responseReceived"), 0);
+  notFound("http://h/later.png");
+  assert.equal(diagnostics.errors.length, 2);
+});
+
+// Like the vendored launchChrome object: close() returns at once when it has been called before, and removes the
+// profile only when the (possibly slow) shutdown has finished.
+function fakeChrome({ closeNever = false, closeMs = 0 } = {}) {
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), "game3d-fake-profile-"));
+  const chrome = { profile, closed: 0, killed: 0, child: { kill() { chrome.killed += 1; } } };
+  let called = false;
+  chrome.close = async () => {
+    if (called) return;
+    called = true;
+    if (closeNever) await new Promise(() => {});
+    if (closeMs > 0) await new Promise((resolve) => setTimeout(resolve, closeMs));
+    chrome.closed += 1;
+    fs.rmSync(profile, { recursive: true, force: true });
+  };
+  return chrome;
+}
+
+test("the cleanup registry installs signal handlers only while something is open and removes them afterwards", async () => {
+  const fake = new EventEmitter();
+  const registry = createCleanupRegistry({ processImpl: fake, exit: () => {}, platform: "win32" });
+  const signals = ["SIGINT", "SIGTERM", "SIGBREAK", "SIGHUP"];
+  const listeners = () => signals.map((signal) => fake.listenerCount(signal));
+  assert.deepEqual(listeners(), [0, 0, 0, 0]);
+  assert.equal(registry.installed, false);
+
+  const first = registry.trackChrome(fakeChrome());
+  const second = registry.trackChrome(fakeChrome());
+  assert.deepEqual(listeners(), [1, 1, 1, 1], "one handler per signal however many things are open");
+  await first.close();
+  assert.deepEqual(listeners(), [1, 1, 1, 1], "still one thing open");
+  await second.close();
+  assert.deepEqual(listeners(), [0, 0, 0, 0]);
+  assert.equal(registry.size, 0);
+
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), "game3d-fake-folder-"));
+  registry.trackFolder(folder);
+  assert.deepEqual(listeners(), [1, 1, 1, 1]);
+  registry.untrackFolder(folder);
+  assert.deepEqual(listeners(), [0, 0, 0, 0]);
+  fs.rmSync(folder, { recursive: true, force: true });
+
+  // SIGBREAK exists on Windows only
+  const posix = new EventEmitter();
+  const posixRegistry = createCleanupRegistry({ processImpl: posix, exit: () => {}, platform: "linux" });
+  const chrome = posixRegistry.trackChrome(fakeChrome());
+  assert.deepEqual(signals.map((signal) => posix.listenerCount(signal)), [1, 1, 0, 1]);
+  await chrome.close();
+});
+
+test("cleanup() closes every Chrome, removes the temp folders and the handlers", async () => {
+  const fake = new EventEmitter();
+  const registry = createCleanupRegistry({ processImpl: fake, exit: () => {}, platform: "linux" });
+  const chromes = [fakeChrome(), fakeChrome()];
+  for (const chrome of chromes) registry.trackChrome(chrome);
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), "game3d-fake-folder-"));
+  fs.writeFileSync(path.join(folder, "sheet.html"), "x");
+  registry.trackFolder(folder);
+  try {
+    await registry.cleanup();
+    assert.deepEqual(chromes.map((chrome) => chrome.closed), [1, 1]);
+    assert.deepEqual(chromes.map((chrome) => fs.existsSync(chrome.profile)), [false, false]);
+    assert.equal(fs.existsSync(folder), false);
+    assert.equal(registry.size, 0);
+    assert.equal(fake.listenerCount("SIGINT"), 0);
+  } finally {
+    fs.rmSync(folder, { recursive: true, force: true });
+  }
+});
+
+test("a signal runs the cleanup once and exits with code 130; a Chrome that will not close is killed after the limit", async () => {
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK"]) {
+    const fake = new EventEmitter();
+    const exits = [];
+    let exitNow;
+    const exited = new Promise((resolve) => { exitNow = resolve; });
+    const registry = createCleanupRegistry({ processImpl: fake, exit: (code) => { exits.push(code); exitNow(); }, platform: "win32", limitMs: 100 });
+    const stuck = fakeChrome({ closeNever: true });
+    const fine = fakeChrome();
+    registry.trackChrome(stuck);
+    registry.trackChrome(fine);
+    fake.emit(signal);
+    fake.emit(signal);
+    await exited;
+    assert.deepEqual(exits, [130], signal);
+    assert.equal(fine.closed, 1, `${signal}: the good Chrome was closed once`);
+    assert.equal(stuck.killed, 1, `${signal}: the stuck Chrome was killed`);
+    assert.equal(fs.existsSync(stuck.profile), false, `${signal}: its profile folder is gone`);
+    assert.equal(registry.size, 0);
+    assert.equal(fake.listenerCount(signal), 0, `${signal}: the handler removed itself`);
+  }
+});
+
 describe("shots.mjs, sheet.mjs and perf.mjs in headless Chrome", { skip: chromeMissing }, () => {
   let server;
   let base;
@@ -126,11 +295,12 @@ describe("shots.mjs, sheet.mjs and perf.mjs in headless Chrome", { skip: chromeM
       ["blank", "Pure white", "03-blank.png", "white"],
     ]);
     for (const shot of report.shots) {
-      assert.deepEqual(Object.keys(shot.stats), ["mean", "std", "white", "black"]);
+      assert.deepEqual(Object.keys(shot.stats), ["mean", "std", "white", "black", "mode"]);
       const png = decodePng(fs.readFileSync(path.join(main, shot.file)));
       assert.deepEqual([png.width, png.height], [640, 360], shot.file);
     }
-    assert.ok(report.shots[0].stats.white > 0.05 && report.shots[0].stats.white < 0.08, "the white square covers 1/16 of the red frame");
+    assert.ok(report.shots[0].stats.white > 0.12 && report.shots[0].stats.white < 0.16, "the white square covers 1/7 of the red frame");
+    assert.ok(report.shots[0].stats.mode < 0.9, "and keeps the red frame from counting as flat");
     assert.equal(report.shots[2].stats.white, 1);
 
     const sheet = decodePng(fs.readFileSync(path.join(main, "sheet.png")));
@@ -239,4 +409,99 @@ describe("shots.mjs, sheet.mjs and perf.mjs in headless Chrome", { skip: chromeM
     assert.equal(within.status, 0, within.stderr);
     assert.equal((await run("perf.mjs", [`${base}/index.html`, "--seconds", "0"], 20_000)).status, 2);
   });
+
+  it("a missing texture and a failed fetch are page errors listed with URL and status; favicon.ico is not", async () => {
+    const out = path.join(work, "missing-assets");
+    const result = await run("shots.mjs", [`${base}/missing-assets.html`, "--out", out, "--size", "320x180", "--settle", "1"]);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stdout, /^PASS grad /m, "the frame itself has content");
+    assert.match(result.stderr, /page error: HTTP 404 .*\/textures\/gate_albedo\.png/);
+    assert.match(result.stderr, /page error: HTTP 404 .*\/models\/optional-player\.vrm/);
+    assert.doesNotMatch(result.stderr, /favicon/);
+    const report = JSON.parse(fs.readFileSync(path.join(out, "shots.json"), "utf8"));
+    assert.equal(report.errors.length, 2);
+    const found = report.networkErrors.map(({ kind, url, status }) => ({ kind, url: url.replace(base, ""), status })).sort((x, y) => x.url.localeCompare(y.url));
+    assert.deepEqual(found, [
+      { kind: "http", url: "/models/optional-player.vrm", status: 404 },
+      { kind: "http", url: "/textures/gate_albedo.png", status: 404 },
+    ]);
+    assert.deepEqual(report.ignoreUrl, []);
+  });
+
+  it("--ignore-url (repeatable) silences known optional assets and only those", async () => {
+    const both = path.join(work, "ignored-both");
+    const result = await run("shots.mjs", [`${base}/missing-assets.html`, "--out", both, "--size", "320x180", "--settle", "1", "--ignore-url", "gate_albedo.png", "--ignore-url", "optional-player.vrm"]);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const report = JSON.parse(fs.readFileSync(path.join(both, "shots.json"), "utf8"));
+    assert.deepEqual(report.errors, []);
+    assert.deepEqual(report.ignoreUrl, ["gate_albedo.png", "optional-player.vrm"]);
+
+    const one = await run("shots.mjs", [`${base}/missing-assets.html`, "--out", path.join(work, "ignored-one"), "--size", "320x180", "--settle", "1", "--ignore-url", "optional-player.vrm"]);
+    assert.equal(one.status, 1, one.stdout + one.stderr);
+    assert.match(one.stderr, /gate_albedo\.png/);
+    assert.doesNotMatch(one.stderr, /optional-player/);
+    assert.equal((await run("shots.mjs", [`${base}/missing-assets.html`, "--out", path.join(work, "x"), "--ignore-url"], 20_000)).status, 2);
+  });
+
+  it("the automatic /favicon.ico request, which the server answers with 404, is not a page error", async () => {
+    const result = await run("shots.mjs", [`${base}/favicon-only.html`, "--out", path.join(work, "favicon"), "--size", "320x180", "--settle", "1"]);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+  });
+
+  it("an async ready() that resolves false keeps waiting until --timeout and exits 2", async () => {
+    const started = Date.now();
+    const result = await run("shots.mjs", [`${base}/ready-async-false.html`, "--out", path.join(work, "async-false"), "--timeout", "3"]);
+    assert.equal(result.status, 2, result.stdout + result.stderr);
+    assert.match(result.stderr, /shots: window\.__shots\.ready\(\) did not return true within 3 s \(waiting: ready\(\) returned false/);
+    assert.ok(Date.now() - started >= 3000, "it waited the whole timeout");
+    assert.equal(fs.existsSync(path.join(work, "async-false", "shots.json")), false, "no capture happened");
+  });
+
+  it("an async ready() that resolves true is ready, and a truthy value that is not true is not", async () => {
+    const good = await run("shots.mjs", [`${base}/ready-async-true.html`, "--out", path.join(work, "async-true"), "--size", "320x180", "--settle", "1", "--timeout", "10"]);
+    assert.equal(good.status, 0, good.stdout + good.stderr);
+    assert.match(good.stdout, /^PASS grad /m);
+    const truthy = await run("shots.mjs", [`${base}/ready-truthy.html`, "--out", path.join(work, "truthy"), "--timeout", "2"]);
+    assert.equal(truthy.status, 2);
+    assert.match(truthy.stderr, /ready\(\) returned "yes", it must be exactly true/);
+  });
+
+  it("perf.mjs fails on page errors with or without --p95, and --ignore-url applies", async () => {
+    const plain = await run("perf.mjs", [`${base}/errors.html`, "--seconds", "1", "--warmup", "0", "--size", "320x180"]);
+    assert.equal(plain.status, 1, plain.stdout + plain.stderr);
+    assert.match(plain.stdout, /^FAIL page errors: 2 /m);
+    assert.match(plain.stderr, /perf: page error: fixture console error/);
+    assert.match(plain.stderr, /perf: page error: Error: fixture uncaught error/);
+    const budget = await run("perf.mjs", [`${base}/errors.html`, "--seconds", "1", "--warmup", "0", "--size", "320x180", "--p95", "1000"]);
+    assert.equal(budget.status, 1, "a generous --p95 no longer hides a page that threw");
+    assert.match(budget.stdout, /^FAIL page errors: 2 /m);
+    assert.match(budget.stdout, /^PASS p95 /m);
+
+    const missing = await run("perf.mjs", [`${base}/missing-assets.html`, "--seconds", "1", "--warmup", "0", "--size", "320x180"]);
+    assert.equal(missing.status, 1, missing.stdout + missing.stderr);
+    assert.match(missing.stderr, /perf: page error: HTTP 404 .*gate_albedo\.png/);
+    const ignored = await run("perf.mjs", [`${base}/missing-assets.html`, "--seconds", "1", "--warmup", "0", "--size", "320x180", "--ignore-url", "gate_albedo.png", "--ignore-url", "optional-player.vrm"]);
+    assert.equal(ignored.status, 0, ignored.stdout + ignored.stderr);
+    assert.doesNotMatch(ignored.stdout, /FAIL/);
+  });
+});
+
+test("a signal during a close that is already under way waits for that close instead of exiting early", async () => {
+  const fake = new EventEmitter();
+  const seen = [];
+  let exitNow;
+  const exited = new Promise((resolve) => { exitNow = resolve; });
+  const registry = createCleanupRegistry({ processImpl: fake, exit: (code) => { seen.push({ code, profileLeft: fs.existsSync(chrome.profile) }); exitNow(); }, platform: "linux", limitMs: 5000 });
+  const chrome = registry.trackChrome(fakeChrome({ closeMs: 300 }));
+  const first = chrome.close();
+  assert.equal(chrome.close(), first, "every caller gets the same close promise");
+  await new Promise((resolve) => setTimeout(resolve, 30)); // the signal lands while the shutdown is still running
+  fake.emit("SIGINT");
+  await exited;
+  await first;
+  assert.deepEqual(seen, [{ code: 130, profileLeft: false }], "the profile was removed before exit was called");
+  assert.equal(chrome.closed, 1);
+  assert.equal(chrome.killed, 0, "a close that finishes in time is not followed by a kill");
+  assert.equal(registry.size, 0);
+  assert.equal(fake.listenerCount("SIGINT"), 0);
 });

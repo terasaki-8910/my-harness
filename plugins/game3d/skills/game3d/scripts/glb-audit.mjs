@@ -7,7 +7,10 @@
 //             maxTextureSize, maxTextureBytes, requireUVs (default true) and
 //             requirePowerOfTwo (default false). Either a flat object or
 //             { "default": {...}, "files": { "<basename>": {...} } }, where the
-//             per-file object overrides the default. Unknown keys are ignored.
+//             per-file object overrides the default. The budget is strict (exit 2): an
+//             unknown key anywhere (a typo such as "maxTris"), limit keys next to "default"
+//             or "files" (put them under "default"), or a "files" key that contains "/" or
+//             "\" (keys are file basenames, matched against the audited file's name).
 //   --json    print only a JSON array of { file, metrics, fail, warn } on stdout
 //             (a file that cannot be read adds { file, error, metrics: null }).
 //
@@ -15,9 +18,14 @@
 // multiplies triangles, not draw calls); uniqueTriangles counts every entry of meshes[]
 // once; missingUVs lists primitives whose material samples TEXCOORD_n they do not have.
 //
+// Images: an image whose bytes cannot be obtained (missing or unreadable external file,
+// undecodable data: URI, bufferView out of range) is a FAIL "missing image <index> <uri>"
+// whatever the budget. An image that is present but in an unknown format only warns
+// ("unknown image format"); an http(s) image is not fetched and warns that it is unchecked.
+//
 // Exit codes: 0 every file passes; 1 a budget check failed; 2 a file or the budget could
-// not be read or parsed (not a GLB, wrong version, truncated chunks, invalid JSON), or
-// the command line is wrong. Reasons go to stderr as "glb-audit: <message>".
+// not be read or parsed (not a GLB, wrong version, truncated chunks, invalid JSON, invalid
+// budget), or the command line is wrong. Reasons go to stderr as "glb-audit: <message>".
 import fs from "node:fs";
 import path from "node:path";
 import { auditGlb, checkBudget, formatAudit, parseAuditArguments, parseGlb, resolveBudget } from "./lib/glb.mjs";

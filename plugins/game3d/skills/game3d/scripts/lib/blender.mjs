@@ -165,9 +165,55 @@ export function blenderCommandLine({ script, args = [] }) {
   return ["--background", "--factory-startup", "--python-exit-code", "1", "--python", script, "--", ...args];
 }
 
+// How long to wait for Blender's output streams to end after Blender itself has exited.
+export const STREAM_GRACE_MS = 2000;
+
+// Resolves { leftover } once every stream has ended, or after graceMs with leftover = true; streams still
+// open then are destroyed so they stop holding node's event loop. `streams` may contain undefined.
+function settleStreams(streams, graceMs) {
+  return new Promise((resolve) => {
+    const open = streams.filter((stream) => stream && !stream.destroyed && !stream.readableEnded);
+    if (open.length === 0) {
+      resolve({ leftover: false });
+      return;
+    }
+    let waiting = open.length;
+    let done = false;
+    const timer = setTimeout(() => {
+      if (done) return;
+      done = true;
+      for (const stream of open) stream.destroy();
+      resolve({ leftover: true });
+    }, graceMs);
+    const ended = () => {
+      waiting -= 1;
+      if (waiting > 0 || done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve({ leftover: false });
+    };
+    for (const stream of open) {
+      let counted = false;
+      const once = () => {
+        if (counted) return;
+        counted = true;
+        ended();
+      };
+      stream.once("end", once);
+      stream.once("close", once);
+      stream.once("error", once);
+    }
+  });
+}
+
 // Runs Blender headless and resolves { code, seconds, sawTraceback }: code is 0, 1 (non-zero
 // exit or a Python traceback in the output) or 124 (timeout, after killTree).
-export function runBlender({ blender, script, args = [], timeoutSec = DEFAULT_TIMEOUT_SECONDS, log = null, spawnImpl = spawn, killTree = killProcessTree, stdout = process.stdout, stderr = process.stderr }) {
+// The result follows Blender's own "exit" event, not "close": "close" waits until every process that
+// holds Blender's output pipes has let go, so a helper the script left running would stall the run until
+// the timeout. After "exit" the output streams get streamGraceMs to end (so the last output is still
+// read for the traceback check); streams still open then belong to a leftover process: a WARN line is
+// written, they are destroyed and not waited for.
+export function runBlender({ blender, script, args = [], timeoutSec = DEFAULT_TIMEOUT_SECONDS, log = null, spawnImpl = spawn, killTree = killProcessTree, stdout = process.stdout, stderr = process.stderr, streamGraceMs = STREAM_GRACE_MS }) {
   return new Promise((resolve, reject) => {
     const started = Date.now();
     let logStream = null;
@@ -188,6 +234,7 @@ export function runBlender({ blender, script, args = [], timeoutSec = DEFAULT_TI
     let sawTraceback = false;
     let settled = false;
     let timedOut = false;
+    let exited = false;
     let timer = null;
     const tails = { out: "", err: "" };
     const watch = (key, chunk) => {
@@ -223,7 +270,18 @@ export function runBlender({ blender, script, args = [], timeoutSec = DEFAULT_TI
       logStream?.write(chunk);
     });
     child.once("error", (error) => finish(reject, error));
-    child.once("close", (code) => finish(resolve, result(timedOut ? TIMEOUT_EXIT_CODE : code === 0 && !sawTraceback ? 0 : 1)));
+    const onExit = (code) => {
+      if (exited || settled) return;
+      exited = true;
+      clearTimeout(timer);
+      if (timedOut) return;
+      settleStreams([child.stdout, child.stderr], streamGraceMs).then(({ leftover }) => {
+        if (leftover) stderr.write("blender: WARN Blender exited but a process started by the script still holds its output pipes; not waiting for it\n");
+        finish(resolve, result(code === 0 && !sawTraceback ? 0 : 1));
+      });
+    };
+    child.once("exit", (code) => onExit(code));
+    child.once("close", (code) => onExit(code));
     timer = setTimeout(() => {
       timedOut = true;
       Promise.resolve(killTree(child)).catch(() => {}).then(() => finish(resolve, result(TIMEOUT_EXIT_CODE)));

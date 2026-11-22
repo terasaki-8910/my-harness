@@ -29,27 +29,33 @@ All scripts are in `skills/game3d/scripts/`. Each file starts with its full usag
 
 | Script | Purpose | Exit codes |
 | --- | --- | --- |
-| `blender.mjs --which` / `blender.mjs <script.py> [--timeout s] [--log f] [-- args]` | Find Blender; run a Python script with `--background --factory-startup`, streaming output. | 0 ok; 1 Blender failed or printed a traceback; 124 timeout (process tree killed); 2 not found or bad arguments |
-| `glb-audit.mjs <file.glb>... [--budget b.json] [--json]` | Triangles (scene and unique), draw calls, materials, textures (size, bytes, slots), missing UVs, non-power-of-two images, against a budget. | 0 pass; 1 over budget; 2 unreadable file or budget |
-| `asset-audit.mjs [dir] [--manifest path] [--json]` | Every file under the asset roots has a manifest entry with a source and an allowed licence; CC-BY needs attribution. | 0 pass; 1 FAIL; 2 manifest or roots unusable |
-| `shots.mjs <url> --out dir [--size WxH] [--backend b] [--headed] [--dpr n] [--only ids] [--settle n] [--timeout s]` | Fixed-camera screenshots through the page contract below; blank-frame check per shot; `shots.json` and `sheet.png`. | 0 all shots have content, no page errors; 1 blank shot or page error; 2 setup problem |
-| `frames.mjs <png or dir>... [--json] [--min-std 0.02] [--max-flat 0.98]` | Blank-frame check of existing PNGs: white, black or uniform. | 0 none blank; 1 a blank frame; 2 unreadable file |
+| `blender.mjs --which` / `blender.mjs <script.py> [--timeout s] [--log f] [-- args]` | Find Blender; run a Python script with `--background --factory-startup`, streaming output. The result follows Blender's own exit: a helper process the script leaves running does not hold the run (a WARN line says so). | 0 ok; 1 Blender failed or printed a traceback; 124 timeout (process tree killed); 2 not found or bad arguments |
+| `glb-audit.mjs <file.glb>... [--budget b.json] [--json]` | Triangles (scene and unique), draw calls, materials, textures (size, bytes, slots), missing UVs, non-power-of-two images, against a budget. A texture whose file is missing or unreadable is a FAIL whatever the budget. | 0 pass; 1 over budget or missing image; 2 unreadable file or invalid budget |
+| `asset-audit.mjs [dir] [--manifest path] [--json]` | Every file under the asset roots has a manifest entry with a source and an allowed licence; CC-BY needs attribution. Directory links and junctions are followed. | 0 pass; 1 FAIL; 2 manifest or roots unusable |
+| `shots.mjs <url> --out dir [--size WxH] [--backend b] [--headed] [--dpr n] [--only ids] [--settle n] [--timeout s] [--ignore-url s]...` | Fixed-camera screenshots through the page contract below; blank-frame check per shot; `shots.json` and `sheet.png`. Page errors include console errors, exceptions, failed resource loads and HTTP status 400 and above (each listed with its URL and status in `shots.json`); `/favicon.ico` is ignored and `--ignore-url` (repeatable, a URL substring) ignores known optional assets. | 0 all shots have content, no page errors; 1 blank shot or page error; 2 setup problem |
+| `frames.mjs <png or dir>... [--json] [--min-std 0.02] [--max-flat 0.98] [--max-mode 0.9]` | Blank-frame check of existing PNGs: white, black, uniform, or flat (at least `--max-mode` of the pixels within +-2 luminance levels of one level, so a whited-out frame with a small HUD box still fails). `shots.mjs` applies the same check with the defaults. | 0 none blank; 1 a blank frame; 2 unreadable file |
 | `sheet.mjs --before dir --after dir --out file.png [--title t]` | Before/after sheet paired by shot id. | 0 written; 2 missing or invalid shots.json |
-| `perf.mjs <url> [--seconds s] [--warmup s] [--headed] [--backend b] [--p95 ms]` | requestAnimationFrame intervals: frames, p50, p95, p99, max, renderer. | 0 ok; 1 p95 over budget; 2 setup problem |
+| `perf.mjs <url> [--seconds s] [--warmup s] [--headed] [--backend b] [--p95 ms] [--ignore-url s]...` | requestAnimationFrame intervals: frames, p50, p95, p99, max, renderer. Page errors (as for `shots.mjs`) fail the run with or without `--p95`. | 0 ok; 1 p95 over budget or page error; 2 setup problem |
+
+A run that is interrupted (Ctrl+C, SIGTERM, a closing console) closes its Chrome, removes its temporary profile and sheet folders and exits with code 130.
 
 Backends: `auto` (GL on Windows, SwiftShader on Linux, default on macOS), `default` (no flags: what players get), `gl`, `d3d11`, `metal`, `swiftshader`. Every capture records the WebGL renderer string, so it is clear which GPU and backend drew the frame.
+
+## Budget file for glb-audit.mjs
+
+Either a flat object of limits, or `{ "default": {...}, "files": { "<basename>": {...} } }` where a per-file object overrides the default for the file with that basename (`hero.glb`, never a path). Limits: `maxFileBytes`, `maxTriangles`, `maxDrawCalls`, `maxMaterials`, `maxTextureSize`, `maxTextureBytes`, `requireUVs` (default true), `requirePowerOfTwo` (default false). The budget is strict and exits 2 with a message that names the problem when it has an unknown key anywhere (a typo such as `maxTris`), limit keys next to `default` or `files` (put them under `default`), or a `files` key that contains `/` or `\`. `templates/asset-budget.json.tmpl` is a valid starting point.
 
 ## Page contract for shots.mjs
 
 ```js
 window.__shots = {
-  ready(): boolean,                                   // assets loaded, shaders warmed
+  ready(): boolean | Promise<boolean>,                // assets loaded, shaders warmed; must be exactly true
   list(): Array<string | { id: string, label?: string }> | Promise<that>,
   show(id: string): void | Promise<void>,             // fixed scene state for that shot, time frozen
 };
 ```
 
-The same build must give the same image for the same shot, whatever order the shots are shown in.
+`ready()` is polled until it returns (or resolves to) exactly `true`; any other value, including a truthy one and a Promise that resolves `false`, keeps waiting until `--timeout` (exit 2). The same build must give the same image for the same shot, whatever order the shots are shown in.
 
 ## Not confirmed or not tested
 
@@ -57,6 +63,7 @@ The same build must give the same image for the same shot, whatever order the sh
 - `blender.mjs` has not been run with Blender 5.x.
 - `glb-audit.mjs` was checked against synthetic GLBs and Blender 4.4 exports, not against the Khronos validator or files with Draco, meshopt, sparse accessors or texture slots beyond the five core ones.
 - The headless D3D11 white-frame failure was seen with a three.js and postprocessing game; the test fixture page does not reproduce it. On Windows, Chrome is spawned with `windowsHide`, so a `--headed` window may stay hidden; captures still work.
+- Blank-frame checks use whole-frame statistics, so a partial failure cannot be seen by them: for example black floors under a good sky (a headless D3D11 capture with black floors passed `frames.mjs`). Judge such captures on the review sheet or cross-check with a headed run.
 - `perf.mjs` numbers depend on which GPU Chrome uses on machines with more than one; read the renderer line.
 - The `art-reviewer` agent has not yet been compared with a person's judgement on a fixed set of shots.
 

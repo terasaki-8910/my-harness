@@ -63,14 +63,29 @@ export function projectView(projectDir) {
   const kindOf = (parent, entry) => {
     if (entry.isDirectory()) return "dir";
     if (entry.isFile()) return "file";
+    // A symbolic link or Windows junction counts as what it points to; a dangling link is nothing.
     if (entry.isSymbolicLink()) {
       try {
-        return fs.statSync(path.join(projectDir, parent, entry.name)).isFile() ? "file" : null;
+        const info = fs.statSync(path.join(projectDir, parent, entry.name));
+        if (info.isDirectory()) return "dir";
+        return info.isFile() ? "file" : null;
       } catch {
         return null;
       }
     }
     return null;
+  };
+  const realPath = (relative) => {
+    const full = path.join(projectDir, relative);
+    try {
+      return fs.realpathSync.native(full);
+    } catch {
+      try {
+        return fs.realpathSync(full);
+      } catch {
+        return null;
+      }
+    }
   };
   const kind = (relative) => {
     const segments = relative.split("/").filter((segment) => segment !== "" && segment !== ".");
@@ -89,15 +104,19 @@ export function projectView(projectDir) {
     const base = relative.replace(/\/+$/, "");
     if (kind(base) !== "dir") return null;
     const found = [];
-    const walk = (directory) => {
+    // Links to directories are followed and files are named by their path under the root, not by the link
+    // target. `ancestors` holds the real paths of the directories above, so a link back up the tree stops there.
+    const walk = (directory, ancestors) => {
+      const real = realPath(directory);
+      if (real === null || ancestors.includes(real)) return;
       for (const entry of entriesOf(directory) ?? []) {
         const child = directory === "" ? entry.name : `${directory}/${entry.name}`;
         const entryKind = kindOf(directory, entry);
         if (entryKind === "file") found.push(child);
-        else if (entryKind === "dir") walk(child);
+        else if (entryKind === "dir") walk(child, [...ancestors, real]);
       }
     };
-    walk(base.split("/").filter((segment) => segment !== "." && segment !== "").join("/"));
+    walk(base.split("/").filter((segment) => segment !== "." && segment !== "").join("/"), []);
     return found.sort();
   };
   return { kind, files };

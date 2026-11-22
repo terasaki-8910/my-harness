@@ -21,13 +21,14 @@ function baseManifest(overrides = {}) {
 }
 
 // files: relative path -> content; manifest: object (written as JSON), a string (written as is) or null (no manifest).
-function withProject({ files = { "public/assets/gate.glb": "glb", "art/blender/gen_gate.py": "py" }, manifest = baseManifest(), manifestPath = "assets/manifest.json" }, run) {
+function withProject({ files = { "public/assets/gate.glb": "glb", "art/blender/gen_gate.py": "py" }, manifest = baseManifest(), manifestPath = "assets/manifest.json", setup = null }, run) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "game3d-assets-"));
   try {
     for (const [name, content] of Object.entries(files)) {
       fs.mkdirSync(path.dirname(path.join(dir, name)), { recursive: true });
       fs.writeFileSync(path.join(dir, name), content);
     }
+    setup?.(dir);
     if (manifest !== null) {
       fs.mkdirSync(path.dirname(path.join(dir, manifestPath)), { recursive: true });
       fs.writeFileSync(path.join(dir, manifestPath), typeof manifest === "string" ? manifest : JSON.stringify(manifest));
@@ -209,4 +210,87 @@ test("manifest normalisation and argument parsing", () => {
   assert.deepEqual(parseAssetArguments([]), { project: ".", manifest: "assets/manifest.json", json: false });
   assert.deepEqual(parseAssetArguments(["game", "--manifest", "m.json", "--json"]), { project: "game", manifest: "m.json", json: true });
   for (const invalid of [["a", "b"], ["--bad"], ["--manifest"]]) assert.throws(() => parseAssetArguments(invalid));
+});
+
+// A Windows junction needs no privilege and a POSIX directory symlink neither; a directory link is how a
+// project shares a vendor folder.
+function linkDirectory(target, link) {
+  fs.mkdirSync(path.dirname(link), { recursive: true });
+  fs.symlinkSync(target, link, process.platform === "win32" ? "junction" : "dir");
+}
+
+function withSharedFolder(files, run) {
+  const shared = fs.mkdtempSync(path.join(os.tmpdir(), "game3d-shared-"));
+  try {
+    for (const [name, content] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(shared, name)), { recursive: true });
+      fs.writeFileSync(path.join(shared, name), content);
+    }
+    return run(shared);
+  } finally {
+    fs.rmSync(shared, { recursive: true, force: true });
+  }
+}
+
+test("an uncovered file behind a directory link is found and named by its path under the root", () => {
+  withSharedFolder({ "ripped.png": "x", "deep/more.png": "x" }, (shared) => {
+    const setup = (dir) => linkDirectory(shared, path.join(dir, "public/assets/vendor"));
+    withProject({ setup }, (dir) => {
+      const result = audit(dir);
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stdout, /^FAIL uncovered file public\/assets\/vendor\/ripped\.png/m);
+      assert.match(result.stdout, /^FAIL uncovered file public\/assets\/vendor\/deep\/more\.png/m);
+      assert.doesNotMatch(result.stdout, /game3d-shared/, "files are not reported under the link target");
+      assert.match(result.stdout, /files\s+3\n/);
+    });
+    const entry = (entryPath, license = "own") => ({ path: entryPath, license, source: "x" });
+    const covered = baseManifest({ assets: [entry("public/assets/gate.glb"), entry("public/assets/vendor/", "CC0-1.0")] });
+    withProject({ setup, manifest: covered }, (dir) => {
+      const result = audit(dir);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.match(result.stdout, /files\s+3\n/);
+    });
+    const exact = baseManifest({ assets: [entry("public/assets/gate.glb"), entry("public/assets/vendor/ripped.png"), entry("public/assets/vendor/deep/more.png")] });
+    withProject({ setup, manifest: exact }, (dir) => assert.equal(audit(dir).status, 0, "exact entries resolve through the link"));
+  });
+});
+
+test("a root that is itself a directory link is audited", () => {
+  withSharedFolder({ "gate.glb": "glb" }, (shared) => {
+    const setup = (dir) => linkDirectory(shared, path.join(dir, "public/assets"));
+    withProject({ files: { "art/blender/gen_gate.py": "py" }, setup }, (dir) => {
+      const result = audit(dir);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.match(result.stdout, /files\s+1\n/);
+    });
+  });
+  withSharedFolder({ "gate.glb": "glb", "stray.png": "x" }, (shared) => {
+    const setup = (dir) => linkDirectory(shared, path.join(dir, "public/assets"));
+    withProject({ files: { "art/blender/gen_gate.py": "py" }, setup }, (dir) => {
+      const result = audit(dir);
+      assert.equal(result.status, 1);
+      assert.match(result.stdout, /^FAIL uncovered file public\/assets\/stray\.png/m);
+    });
+  });
+});
+
+test("a directory link that points back up the tree does not loop", () => {
+  const setup = (dir) => {
+    linkDirectory(path.join(dir, "public/assets"), path.join(dir, "public/assets/again"));
+    linkDirectory(path.join(dir, "public"), path.join(dir, "public/assets/up"));
+  };
+  withProject({ setup }, (dir) => {
+    const result = audit(dir);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /files\s+1\n/);
+  });
+});
+
+test("a dangling directory link is ignored", () => {
+  const setup = (dir) => {
+    const gone = fs.mkdtempSync(path.join(os.tmpdir(), "game3d-gone-"));
+    linkDirectory(gone, path.join(dir, "public/assets/gone"));
+    fs.rmSync(gone, { recursive: true, force: true });
+  };
+  withProject({ setup }, (dir) => assert.equal(audit(dir).status, 0));
 });

@@ -1,12 +1,18 @@
 #!/usr/bin/env node
 // Blank-frame check for PNG screenshots.
 //
-// Usage: frames.mjs <png file or directory>... [--json] [--min-std 0.02] [--max-flat 0.98]
+// Usage: frames.mjs <png file or directory>... [--json] [--min-std 0.02] [--max-flat 0.98] [--max-mode 0.9]
 //
 // Directories are scanned (not recursively) for .png files. Each file prints
 //   PASS <file> mean=<0..1> std=<0..1>
-//   FAIL <file> <white|black|uniform> mean=<..> std=<..>
-// With --json only a JSON array of { file, stats, blank } is printed.
+//   FAIL <file> <white|black|uniform|flat> mean=<..> std=<..>
+// white/black: at least --max-flat of the sampled pixels are that colour. uniform: the luminance std is
+// below --min-std. flat: at least --max-mode of the samples lie within +-2 levels (of 255) of the most
+// common luminance level, so a whited-out frame with a small HUD box on it is still caught.
+// Limit: these are whole-frame statistics. A partial failure (for example black floors under a good sky,
+// as headless D3D11 produced) cannot be seen this way and passes; judge it on the review sheet or
+// cross-check with a headed run.
+// With --json only a JSON array of { file, stats, blank } is printed; stats has mean, std, white, black, mode.
 // Exit 0: no frame is blank. Exit 1: some frame is blank. Exit 2: a file cannot be read or decoded
 // (also wins over 1), or the arguments are wrong. Files that cannot be decoded are reported on stderr.
 import fs from "node:fs";
@@ -14,7 +20,7 @@ import path from "node:path";
 import { blankReason, frameStats, toSlash } from "./lib/frames.mjs";
 import { decodePng } from "./lib/png.mjs";
 
-const USAGE = "Usage: frames.mjs <png file or directory>... [--json] [--min-std 0.02] [--max-flat 0.98]";
+const USAGE = "Usage: frames.mjs <png file or directory>... [--json] [--min-std 0.02] [--max-flat 0.98] [--max-mode 0.9]";
 
 function numberOption(argv, index, name) {
   const value = argv[index + 1];
@@ -24,12 +30,13 @@ function numberOption(argv, index, name) {
 }
 
 function parseArguments(argv) {
-  const result = { inputs: [], json: false, minStd: 0.02, maxFlat: 0.98 };
+  const result = { inputs: [], json: false, minStd: 0.02, maxFlat: 0.98, maxMode: 0.9 };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--json") result.json = true;
     else if (argument === "--min-std") result.minStd = numberOption(argv, index++, argument);
     else if (argument === "--max-flat") result.maxFlat = numberOption(argv, index++, argument);
+    else if (argument === "--max-mode") result.maxMode = numberOption(argv, index++, argument);
     else if (argument.startsWith("--")) throw new Error(`Unknown argument: ${argument}\n${USAGE}`);
     else result.inputs.push(argument);
   }
@@ -70,7 +77,7 @@ function main() {
       process.stderr.write(`frames: ${name}: ${error.message}\n`);
       continue;
     }
-    results.push({ file: name, stats, blank: blankReason(stats, { minStd: args.minStd, maxFlat: args.maxFlat }) });
+    results.push({ file: name, stats, blank: blankReason(stats, { minStd: args.minStd, maxFlat: args.maxFlat, maxMode: args.maxMode }) });
   }
   if (args.json) {
     process.stdout.write(`${JSON.stringify(results, null, 2)}\n`);

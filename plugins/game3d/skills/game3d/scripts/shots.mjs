@@ -2,11 +2,11 @@
 // Fixed-camera screenshots of a web game, with blank-frame detection and a contact sheet.
 //
 // Usage: shots.mjs <url> --out <dir> [--size 1600x900] [--backend auto|default|gl|d3d11|metal|swiftshader]
-//                  [--headed] [--dpr 1] [--only id1,id2] [--settle 3] [--timeout 60]
+//                  [--headed] [--dpr 1] [--only id1,id2] [--settle 3] [--timeout 60] [--ignore-url <substring>]...
 //
 // Page contract: the page defines
 //   window.__shots = {
-//     ready(): boolean,
+//     ready(): boolean | Promise<boolean>,   // must be exactly true; anything else keeps waiting until --timeout
 //     list(): Array<string | { id: string, label?: string }> | Promise<that>,
 //     show(id: string): void | Promise<void>,
 //   }
@@ -14,8 +14,14 @@
 //
 // Writes <dir>/NN-<id>.png per shot, <dir>/shots.json and <dir>/sheet.png (contact sheet).
 // Prints PASS/FAIL per shot, the WebGL renderer string and the output paths.
-// Exit 0: every shot has content and the page logged no errors. Exit 1: a shot is blank or the page logged
-// errors. Exit 2: setup problem (no Chrome, contract missing, timeout, bad arguments).
+// Page errors are console errors, uncaught exceptions, failed resource loads (Network.loadingFailed except
+// canceled requests), responses with HTTP status >= 400 and Log entries of level error. /favicon.ico is
+// ignored; --ignore-url <substring> (repeatable) also ignores requests whose URL contains it, for known
+// optional assets such as a player.vrm the game probes for. shots.json lists each request error with its
+// URL and status under "networkErrors".
+// Exit 0: every shot has content and the page logged no errors. Exit 1: a shot is blank (white, black,
+// uniform or flat, see frames.mjs) or the page logged errors. Exit 2: setup problem (no Chrome, contract
+// missing, timeout, bad arguments).
 //
 // --backend auto means gl on Windows, swiftshader on Linux, default on macOS. Headless Chrome with ANGLE's
 // D3D11 backend rendered all-white frames of WebGL games on Windows, so check the renderer line.
@@ -26,11 +32,11 @@ import { BACKENDS, evaluate, htmlToPng, openGamePage, parseNumber, parseSize, re
 import { decodePng } from "./lib/png.mjs";
 import { pngDataUri, safeFilePart, sheetHtml } from "./lib/sheet.mjs";
 
-const USAGE = "Usage: shots.mjs <url> --out <dir> [--size 1600x900] [--backend auto|default|gl|d3d11|metal|swiftshader] [--headed] [--dpr 1] [--only id1,id2] [--settle 3] [--timeout 60]";
-const CONTRACT = "window.__shots = { ready(): boolean, list(): Array<string | { id: string, label?: string }> | Promise<that>, show(id: string): void | Promise<void> }";
+const USAGE = "Usage: shots.mjs <url> --out <dir> [--size 1600x900] [--backend auto|default|gl|d3d11|metal|swiftshader] [--headed] [--dpr 1] [--only id1,id2] [--settle 3] [--timeout 60] [--ignore-url <substring>]...";
+const CONTRACT = "window.__shots = { ready(): boolean | Promise<boolean>, list(): Array<string | { id: string, label?: string }> | Promise<that>, show(id: string): void | Promise<void> }";
 
 function parseArguments(argv) {
-  const result = { url: null, out: null, size: "1600x900", backend: "auto", headed: false, dpr: 1, only: null, settle: 3, timeout: 60 };
+  const result = { url: null, out: null, size: "1600x900", backend: "auto", headed: false, dpr: 1, only: null, settle: 3, timeout: 60, ignoreUrl: [] };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--headed") result.headed = true;
@@ -41,6 +47,7 @@ function parseArguments(argv) {
     else if (argument === "--only") result.only = takeValue(argv, index++, argument).split(",").map((id) => id.trim()).filter(Boolean);
     else if (argument === "--settle") result.settle = parseNumber(takeValue(argv, index++, argument), argument, { integer: true });
     else if (argument === "--timeout") result.timeout = parseNumber(takeValue(argv, index++, argument), argument, { min: 0, exclusiveMin: true });
+    else if (argument === "--ignore-url") result.ignoreUrl.push(takeValue(argv, index++, argument));
     else if (argument.startsWith("--")) throw new Error(`Unknown argument: ${argument}\n${USAGE}`);
     else if (result.url === null) result.url = argument;
     else throw new Error(`Unexpected argument: ${argument}\n${USAGE}`);
@@ -53,19 +60,34 @@ function parseArguments(argv) {
   return { ...result, ...parseSize(result.size) };
 }
 
-const PROBE = `(() => {
+// Evaluated in the page; `waitMs` bounds how long one probe waits for an async ready(). One call of ready() is
+// in flight at a time (kept on window), so a slow async ready() is not started again on every poll.
+const readyProbe = (waitMs) => `(async () => {
   const shots = window.__shots;
   if (!shots) return "missing";
   for (const name of ["ready", "list", "show"]) if (typeof shots[name] !== "function") return "invalid: window.__shots." + name + " is not a function";
-  try { return shots.ready() ? "ready" : "waiting"; } catch (error) { return "error: " + ((error && error.message) || error); }
+  try {
+    if (!window.__game3dReady) {
+      window.__game3dReady = Promise.resolve()
+        .then(() => shots.ready())
+        .then((value) => ({ value }), (error) => ({ failed: true, error }))
+        .finally(() => { window.__game3dReady = null; });
+    }
+    const outcome = await Promise.race([window.__game3dReady, new Promise((resolve) => setTimeout(() => resolve({ pending: true }), ${waitMs}))]);
+    if (outcome.pending) return "waiting: ready() has not settled yet";
+    if (outcome.failed) return "error: " + ((outcome.error && outcome.error.message) || outcome.error);
+    if (outcome.value === true) return "ready";
+    return "waiting: ready() returned " + (typeof outcome.value === "string" ? JSON.stringify(outcome.value) : String(outcome.value)) + ", it must be exactly true";
+  } catch (error) { return "error: " + ((error && error.message) || error); }
 })()`;
 
 async function waitForContract(cdp, sessionId, timeout) {
   const started = Date.now();
   let state = "missing";
   for (;;) {
+    const remaining = timeout * 1000 - (Date.now() - started);
     try {
-      state = await evaluate(cdp, sessionId, PROBE, 10);
+      state = await evaluate(cdp, sessionId, readyProbe(Math.max(50, Math.min(1000, remaining))), 10);
     } catch (error) {
       if (/pipe is closed|Chrome exited/.test(error.message)) throw error;
       state = `waiting: ${error.message}`;
@@ -98,7 +120,7 @@ async function main() {
   const args = parseArguments(process.argv.slice(2));
   const out = path.resolve(args.out);
   const callTimeout = Math.max(args.timeout, 10);
-  const opened = await openGamePage({ url: args.url, width: args.width, height: args.height, backend: args.backend, headed: args.headed, dpr: args.dpr });
+  const opened = await openGamePage({ url: args.url, width: args.width, height: args.height, backend: args.backend, headed: args.headed, dpr: args.dpr, ignoreUrl: args.ignoreUrl });
   const { chrome, sessionId } = opened;
   const shots = [];
   try {
@@ -126,7 +148,8 @@ async function main() {
   const { renderer, chromeVersion, diagnostics } = opened;
   const report = {
     url: args.url, size: [args.width, args.height], dpr: args.dpr, backend: args.backend, headed: args.headed,
-    renderer, chromeVersion, date: new Date().toISOString(), shots, errors: diagnostics.errors,
+    renderer, chromeVersion, date: new Date().toISOString(), shots,
+    errors: diagnostics.errors, networkErrors: diagnostics.networkErrors, ignoreUrl: args.ignoreUrl,
   };
   const reportPath = path.join(out, "shots.json");
   await fs.promises.writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`);

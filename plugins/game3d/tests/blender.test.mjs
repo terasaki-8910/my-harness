@@ -294,3 +294,71 @@ test("integration: a real Blender exports a textured cube that the GLB audit rea
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// A child that has exited ("exit") while a process it started still holds the output pipes: Node never emits "close".
+function exitsWithLeftover(code, { stdout = [], stderr = [], late = [] } = {}) {
+  return async (child) => {
+    for (const chunk of stdout) {
+      child.stdout.write(chunk);
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    for (const chunk of stderr) {
+      child.stderr.write(chunk);
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    child.emit("exit", code, null);
+    for (const chunk of late) {
+      await new Promise((resolve) => setImmediate(resolve));
+      child.stdout.write(chunk);
+    }
+  };
+}
+
+test("runBlender decides on exit when a leftover process keeps the pipes open, warns and destroys the streams", async () => {
+  const spawnImpl = fakeSpawn(exitsWithLeftover(0, { stdout: ["export done\n"] }));
+  const err = sink();
+  const started = Date.now();
+  const outcome = await runBlender({ blender: "b", script: "s.py", timeoutSec: 30, streamGraceMs: 100, spawnImpl, stdout: sink(), stderr: err });
+  assert.equal(outcome.code, 0);
+  assert.equal(outcome.sawTraceback, false);
+  assert.ok(Date.now() - started < 5000);
+  assert.match(err.text(), /^blender: WARN .*still holds its output pipes; not waiting for it$/m);
+  const [{ child }] = spawnImpl.calls;
+  assert.equal(child.stdout.destroyed, true);
+  assert.equal(child.stderr.destroyed, true);
+});
+
+test("runBlender keeps the exit code and the traceback check when a leftover process holds the pipes", async () => {
+  const failing = await runBlender({ blender: "b", script: "s.py", streamGraceMs: 50, spawnImpl: fakeSpawn(exitsWithLeftover(1)), stdout: sink(), stderr: sink() });
+  assert.equal(failing.code, 1);
+  const traceback = await runBlender({
+    blender: "b", script: "s.py", streamGraceMs: 50, stdout: sink(), stderr: sink(),
+    spawnImpl: fakeSpawn(exitsWithLeftover(0, { stderr: ["Traceback (most recent call last):\n", "RuntimeError: boom\n"] })),
+  });
+  assert.equal(traceback.code, 1);
+  assert.equal(traceback.sawTraceback, true);
+});
+
+test("runBlender still reads output that arrives after exit and does not warn when the streams end", async () => {
+  const spawnImpl = fakeSpawn(async (child) => {
+    child.emit("exit", 0, null);
+    await new Promise((resolve) => setImmediate(resolve));
+    child.stderr.write("Traceback (most recent call last):\n");
+    await new Promise((resolve) => setImmediate(resolve));
+    child.stdout.end();
+    child.stderr.end();
+  });
+  const err = sink();
+  const outcome = await runBlender({ blender: "b", script: "s.py", streamGraceMs: 5000, spawnImpl, stdout: sink(), stderr: err });
+  assert.equal(outcome.code, 1);
+  assert.equal(outcome.sawTraceback, true);
+  assert.doesNotMatch(err.text(), /WARN/);
+});
+
+test("runBlender does not time out a run whose Blender already exited, even while it waits for the pipes", async () => {
+  const killed = [];
+  const spawnImpl = fakeSpawn(exitsWithLeftover(0));
+  const outcome = await runBlender({ blender: "b", script: "s.py", timeoutSec: 0.2, streamGraceMs: 600, spawnImpl, killTree: (child) => killed.push(child.pid), stdout: sink(), stderr: sink() });
+  assert.equal(outcome.code, 0);
+  assert.deepEqual(killed, []);
+});

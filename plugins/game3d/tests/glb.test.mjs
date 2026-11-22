@@ -256,7 +256,7 @@ test("embedded PNG sizes, power-of-two checks, texture bytes and material slots"
   assert.ok(strict.fail.includes("maxTextureSize 2048 > 1024"));
 });
 
-test("KHR_texture_basisu sources resolve to the KTX2 image and unreadable images only warn", () => {
+test("KHR_texture_basisu sources resolve to the KTX2 image and a remote image only warns", () => {
   const ktx = ktx2(512, 256);
   const json = baseJson({
     meshes: [{ primitives: [{ attributes: { POSITION: 0, TEXCOORD_0: 1 }, material: 0 }] }],
@@ -275,10 +275,11 @@ test("KHR_texture_basisu sources resolve to the KTX2 image and unreadable images
   assert.deepEqual(metrics.textures[0].slots, ["emissive"]);
   assert.deepEqual(metrics.textures[1].slots, ["occlusion"]);
   assert.equal(metrics.textures[1].width, null);
-  assert.deepEqual(metrics.unreadableImages, [{ index: 1, name: "mystery" }]);
+  assert.deepEqual(metrics.missingImages, []);
+  assert.deepEqual(metrics.unreadableImages, [{ index: 1, name: "mystery", reason: "not checked (https://example.test/mystery.png is not a local file)" }]);
   const result = checkBudget(metrics, resolveBudget(null, "a.glb"));
   assert.deepEqual(result.fail, []);
-  assert.match(result.warn[0], /image 1 "mystery"/);
+  assert.match(result.warn[0], /image 1 "mystery": not checked/);
 });
 
 test("images next to the GLB are read from disk when the URI is relative", () => {
@@ -358,10 +359,31 @@ test("budget files: flat, default plus per-file overrides, and typed values", ()
   assert.equal(resolveBudget(nested, "big.glb").maxTriangles, 1000);
   assert.equal(resolveBudget(nested, "big.glb").requireUVs, false);
   assert.equal(resolveBudget(nested, "small.glb").maxTriangles, 100);
-  assert.equal(resolveBudget({ maxTriangles: 5, futureKey: "ignored" }, "a.glb").maxTriangles, 5);
   assert.throws(() => resolveBudget({ maxTriangles: "many" }, "a.glb"), /maxTriangles/);
   assert.throws(() => resolveBudget({ requireUVs: "yes" }, "a.glb"), /requireUVs/);
   assert.throws(() => resolveBudget([], "a.glb"), /JSON object/);
+});
+
+test("the budget is strict: unknown keys, limits next to default/files and path-like file keys throw", () => {
+  const budgetError = (budget, pattern) => assert.throws(() => resolveBudget(budget, "a.glb"), pattern, JSON.stringify(budget));
+  // a typo must not drop its limit silently, at the top level, in "default" and in a "files" entry
+  budgetError({ maxTris: 1000 }, /budget: unknown key "maxTris"/);
+  budgetError({ default: { maxTris: 1000 } }, /budget default: unknown key "maxTris"/);
+  budgetError({ default: {}, files: { "hero.glb": { maxTris: 1 } } }, /budget files\["hero\.glb"\]: unknown key "maxTris"/);
+  budgetError({ files: { "hero.glb": { default: {} } } }, /unknown key "default"/);
+  budgetError({ default: { files: {} } }, /budget default: unknown key "files"/);
+  // limits next to default/files are never read
+  budgetError({ maxTriangles: 1000, default: { maxDrawCalls: 50 } }, /"maxTriangles" sits next to "default"\/"files".*put limits under "default"/);
+  budgetError({ maxTriangles: 1000, files: { "hero.glb": { maxTriangles: 80000 } } }, /put limits under "default"/);
+  budgetError({ requireUVs: false, default: {} }, /put limits under "default"/);
+  budgetError({ maxTriangles: "1000", files: {} }, /maxTriangles must be a non-negative number/);
+  // keys of "files" are basenames
+  budgetError({ default: {}, files: { "models/rock.glb": { maxTriangles: 1000 } } }, /budget files\["models\/rock\.glb"\]: keys are file basenames/);
+  budgetError({ files: { "models\\rock.glb": {} } }, /keys are file basenames/);
+  // valid forms still resolve
+  assert.equal(resolveBudget({ default: { maxTriangles: 7 }, files: {} }, "a.glb").maxTriangles, 7);
+  assert.equal(resolveBudget({ files: { "a.glb": { maxTriangles: 9 } } }, "a.glb").maxTriangles, 9);
+  assert.deepEqual(resolveBudget({}, "a.glb"), { requireUVs: true, requirePowerOfTwo: false });
 });
 
 test("checkBudget reports one FAIL per exceeded limit, in metric terms", () => {
@@ -460,4 +482,110 @@ test("glb-audit.mjs exits 2 with a reason for random bytes, a missing file and a
     assert.equal(runCli([good, "--budget", path.join(dir, "budget.json")]).status, 2);
     assert.equal(runCli([]).status, 2);
   });
+});
+
+test("glb-audit.mjs exits 2 and names the problem for an invalid budget", () => {
+  withTemp((dir) => {
+    const file = path.join(dir, "tri.glb");
+    fs.writeFileSync(file, triangleGlb());
+    const cases = [
+      [{ maxTris: 1000 }, /invalid budget .*budget\.json: budget: unknown key "maxTris"/],
+      [{ default: { maxTriangles: 10, maxDrawcalls: 3 } }, /budget default: unknown key "maxDrawcalls"/],
+      [{ default: {}, files: { "tri.glb": { maxTriangle: 1 } } }, /budget files\["tri\.glb"\]: unknown key "maxTriangle"/],
+      [{ maxTriangles: 1000, default: { maxDrawCalls: 50 } }, /put limits under "default"/],
+      [{ maxTriangles: 1000, files: { "hero.glb": { maxTriangles: 80000 } } }, /put limits under "default"/],
+      [{ default: {}, files: { "models/tri.glb": { maxTriangles: 0 } } }, /keys are file basenames/],
+    ];
+    for (const [budget, pattern] of cases) {
+      fs.writeFileSync(path.join(dir, "budget.json"), JSON.stringify(budget));
+      const result = runCli([file, "--budget", path.join(dir, "budget.json")]);
+      assert.equal(result.status, 2, JSON.stringify(budget));
+      assert.match(result.stderr, pattern);
+      assert.equal(result.stdout, "", "no audit runs on an invalid budget");
+    }
+    fs.writeFileSync(path.join(dir, "budget.json"), JSON.stringify({ default: { maxTriangles: 10 }, files: { "tri.glb": { maxTriangles: 0 } } }));
+    assert.equal(runCli([file, "--budget", path.join(dir, "budget.json")]).status, 1, "a valid nested budget keeps working");
+  });
+});
+
+function imageJson(images, extra = {}) {
+  return baseJson({
+    meshes: [{ primitives: [{ attributes: { POSITION: 0, TEXCOORD_0: 1 }, material: 0 }] }],
+    accessors: [
+      { componentType: 5126, count: 3, type: "VEC3" },
+      { componentType: 5126, count: 3, type: "VEC2" },
+    ],
+    materials: [{ pbrMetallicRoughness: { baseColorTexture: { index: 0 } } }],
+    textures: [{ source: 0 }],
+    images,
+    ...extra,
+  });
+}
+
+test("an external image file that is missing is a FAIL whatever the budget, and a present one is read", () => {
+  withTemp((dir) => {
+    const file = path.join(dir, "gate.glb");
+    fs.writeFileSync(file, buildGlb(imageJson([{ uri: "textures/gate_albedo.png", mimeType: "image/png" }])));
+    for (const budget of [null, { maxTextureSize: 2048, maxTextureBytes: 4000000 }, { default: { requireUVs: false } }]) {
+      if (budget) fs.writeFileSync(path.join(dir, "budget.json"), JSON.stringify(budget));
+      const result = runCli([file, ...(budget ? ["--budget", path.join(dir, "budget.json")] : [])]);
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stdout, /^FAIL missing image 0 textures\/gate_albedo\.png$/m);
+      assert.match(result.stdout, /^FAIL .*gate\.glb$/m);
+      assert.doesNotMatch(result.stdout, /^WARN/m);
+    }
+    fs.mkdirSync(path.join(dir, "textures"));
+    fs.writeFileSync(path.join(dir, "textures/gate_albedo.png"), png(64, 32));
+    const present = runCli([file]);
+    assert.equal(present.status, 0, present.stdout + present.stderr);
+    assert.match(present.stdout, /image 0: 64x32, image\/png/);
+  });
+});
+
+test("an unreadable external image (a directory, a bad percent escape) is missing", () => {
+  withTemp((dir) => {
+    fs.mkdirSync(path.join(dir, "tex.png"));
+    const missing = (uri) => audit(imageJson([{ uri }]), null, { dir }).missingImages;
+    assert.deepEqual(missing("tex.png"), [{ index: 0, name: null, uri: "tex.png" }]);
+    assert.deepEqual(missing("bad%zzname.png"), [{ index: 0, name: null, uri: "bad%zzname.png" }]);
+  });
+});
+
+test("an undecodable data: URI, a missing or out-of-range bufferView and an image without a source are missing", () => {
+  const missing = (images, extra) => audit(imageJson(images, extra), triangleBin()).missingImages;
+  assert.deepEqual(missing([{ uri: "data:image/png;base64," }]), [{ index: 0, name: null, uri: "data:image/png;base64," }]);
+  assert.deepEqual(missing([{ uri: "data:no comma here" }]), [{ index: 0, name: null, uri: "data:no comma here" }]);
+  assert.deepEqual(missing([{ bufferView: 3 }], { bufferViews: triangleViews }), [{ index: 0, name: null, uri: "bufferView 3" }]);
+  assert.deepEqual(missing([{ bufferView: 0 }], { bufferViews: [{ buffer: 0, byteOffset: 30, byteLength: 400 }] }), [{ index: 0, name: null, uri: "bufferView 0" }]);
+  assert.deepEqual(missing([{ bufferView: 0 }], { bufferViews: [{ buffer: 7, byteLength: 4 }] }), [{ index: 0, name: null, uri: "bufferView 0" }]);
+  assert.deepEqual(missing([{ name: "orphan" }]), [{ index: 0, name: "orphan", uri: "(no uri or bufferView)" }]);
+  const metrics = audit(imageJson([{ bufferView: 3 }], { bufferViews: triangleViews }), triangleBin());
+  assert.deepEqual(checkBudget(metrics, resolveBudget(null, "a.glb")).fail, ["missing image 0 bufferView 3"]);
+  assert.equal(metrics.textureBytes, 0);
+});
+
+test("a present image of unknown format only warns unknown image format", () => {
+  withTemp((dir) => {
+    const file = path.join(dir, "gate.glb");
+    fs.writeFileSync(file, buildGlb(imageJson([{ uri: "mystery.bin", name: "mystery" }])));
+    fs.writeFileSync(path.join(dir, "mystery.bin"), crypto.randomBytes(64));
+    const result = runCli([file]);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /^WARN image 0 "mystery": unknown image format$/m);
+    assert.doesNotMatch(result.stdout, /missing image/);
+    // a data: URI that decodes to bytes of no known image format is present, so it only warns too
+    const bytes = crypto.randomBytes(32).toString("base64");
+    const embedded = audit(imageJson([{ uri: "data:application/octet-stream;base64," + bytes }]), null, { dir });
+    assert.deepEqual(embedded.missingImages, []);
+    assert.deepEqual(checkBudget(embedded, resolveBudget(null, "a.glb")).warn, ["image 0: unknown image format"]);
+  });
+});
+
+test("a data: URI image is decoded and sized, and a long undecodable data: URI is cut in the message", () => {
+  const embedded = audit(imageJson([{ uri: "data:image/png;base64," + png(16, 8).toString("base64") }]));
+  assert.equal(embedded.textures[0].width, 16);
+  assert.deepEqual(embedded.missingImages, []);
+  const noComma = "data:" + "x".repeat(300);
+  const [item] = audit(imageJson([{ uri: noComma }])).missingImages;
+  assert.equal(item.uri, noComma.slice(0, 40) + "...");
 });

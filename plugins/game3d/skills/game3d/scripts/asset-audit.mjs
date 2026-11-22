@@ -10,7 +10,9 @@
 //                   "author": "...", "tool": "Blender 4.4", "attribution": "" } ] }
 // A path in assets[] or ignore that ends with "/" covers every file below that directory;
 // any other path is one exact file. Paths are relative to the project directory, use
-// forward slashes and are compared case-sensitively.
+// forward slashes and are compared case-sensitively. Symbolic links and Windows junctions to
+// directories are followed (also when a root is itself a link); files are named by their path
+// under the root, not by the link target, and a link back up the tree is not followed again.
 //
 // FAIL: a file under a root is neither covered by an asset entry nor ignored; an exact-file
 // entry does not exist, or a directory entry covers no file; a license is not in

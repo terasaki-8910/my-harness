@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>missing assets</title>
+<link rel="icon" href="/favicon.ico">
+<style>html,body{margin:0;height:100%;overflow:hidden}body{background:linear-gradient(90deg,#101830,#f0c060)}</style>
+</head>
+<body>
+<script>
+// The engine falls back to a default material when the texture is missing, so the frame still has content.
+const albedo = new Image();
+albedo.src = "textures/gate_albedo.png";
+fetch("models/optional-player.vrm").then((response) => (response.ok ? response.arrayBuffer() : null));
+window.__shots = {
+  ready: () => true,
+  list: () => ["grad"],
+  show() {},
+};
+</script>
+</body>
+</html>

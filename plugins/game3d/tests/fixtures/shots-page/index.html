@@ -17,7 +17,8 @@ const scenes = {
     ctx.fillStyle = "#c0152a";
     ctx.fillRect(0, 0, w, h);
     ctx.fillStyle = "#ffffff";
-    const side = Math.round(h / 3);
+    // Half the height: a small square would leave 90% or more of the frame one colour, which counts as flat.
+    const side = Math.round(h / 2);
     ctx.fillRect(Math.round((w - side) / 2), Math.round((h - side) / 2), side, side);
   },
   grad(w, h) {

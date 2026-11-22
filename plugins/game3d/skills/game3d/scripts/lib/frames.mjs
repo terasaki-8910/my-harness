@@ -6,7 +6,8 @@ export function toSlash(value) {
  * Luminance statistics of a decoded PNG ({ width, height, channels, data }).
  * Every `step`-th pixel in x and y is sampled; Y = 0.2126 R + 0.7152 G + 0.0722 B on a 0..1 scale
  * (grey images use the grey value, alpha is ignored). `white` and `black` are the fractions of
- * samples with Y > 0.97 and Y < 0.03.
+ * samples with Y > 0.97 and Y < 0.03. `mode` is the fraction of samples within +-2 of the most common
+ * level when Y is quantised to 0..255 (a frame of one flat colour with a few HUD pieces on it is near 1).
  */
 export function frameStats(image, { step = 4 } = {}) {
   if (!Number.isInteger(step) || step < 1) throw new Error("step must be a positive integer");
@@ -17,10 +18,13 @@ export function frameStats(image, { step = 4 } = {}) {
   let sumOfSquares = 0;
   let white = 0;
   let black = 0;
+  const histogram = new Uint32Array(256);
   for (let y = 0; y < height; y += step) {
     for (let x = 0; x < width; x += step) {
       const index = (y * width + x) * channels;
-      const luminance = (colour ? 0.2126 * data[index] + 0.7152 * data[index + 1] + 0.0722 * data[index + 2] : data[index]) / 255;
+      const level = colour ? 0.2126 * data[index] + 0.7152 * data[index + 1] + 0.0722 * data[index + 2] : data[index];
+      const luminance = level / 255;
+      histogram[Math.min(255, Math.round(level))] += 1;
       count += 1;
       sum += luminance;
       sumOfSquares += luminance * luminance;
@@ -30,13 +34,24 @@ export function frameStats(image, { step = 4 } = {}) {
   }
   if (count === 0) throw new Error("image has no pixels");
   const mean = sum / count;
-  return { mean, std: Math.sqrt(Math.max(0, sumOfSquares / count - mean * mean)), white: white / count, black: black / count };
+  let common = 0;
+  for (let level = 1; level < 256; level += 1) if (histogram[level] > histogram[common]) common = level;
+  let near = 0;
+  for (let level = Math.max(0, common - 2); level <= Math.min(255, common + 2); level += 1) near += histogram[level];
+  return { mean, std: Math.sqrt(Math.max(0, sumOfSquares / count - mean * mean)), white: white / count, black: black / count, mode: near / count };
 }
 
-export function blankReason(stats, { minStd = 0.02, maxFlat = 0.98 } = {}) {
+/**
+ * Why a frame counts as blank, or null. Order: white, black, uniform (std below `minStd`), then flat:
+ * at least `maxMode` of the samples sit within +-2 levels of one level, which catches a whited-out or
+ * blacked-out frame that a small HUD element keeps below `maxFlat`. Whole-frame statistics cannot see a
+ * partial failure such as black floors under a good sky; that needs a person or a headed cross-check.
+ */
+export function blankReason(stats, { minStd = 0.02, maxFlat = 0.98, maxMode = 0.9 } = {}) {
   if (stats.white >= maxFlat) return "white";
   if (stats.black >= maxFlat) return "black";
   if (stats.std < minStd) return "uniform";
+  if (stats.mode >= maxMode) return "flat";
   return null;
 }
 
