@@ -89,13 +89,13 @@ export async function findFfmpeg({ env = process.env, spawnImpl = spawn, signal 
   return { ffmpeg, ffprobe, ffmpegVersion, ffprobeVersion };
 }
 
-export function launchChrome(executable, { width, height, spawnImpl = spawn, fsImpl = fs, tmpdir = os.tmpdir() }) {
+export function launchChrome(executable, { width, height, headless = true, extraArgs = [], spawnImpl = spawn, fsImpl = fs, tmpdir = os.tmpdir() }) {
   const profile = fsImpl.mkdtempSync(path.join(tmpdir, "demo-video-chrome-"));
   const args = [
-    "--headless=new", "--remote-debugging-pipe", `--user-data-dir=${profile}`, "--no-first-run",
+    ...(headless ? ["--headless=new"] : []), "--remote-debugging-pipe", `--user-data-dir=${profile}`, "--no-first-run",
     "--no-default-browser-check", "--disable-extensions", "--hide-scrollbars", "--mute-audio",
     "--force-color-profile=srgb", "--disable-background-timer-throttling", "--disable-renderer-backgrounding",
-    "--disable-backgrounding-occluded-windows", `--window-size=${width},${height}`, "about:blank",
+    "--disable-backgrounding-occluded-windows", `--window-size=${width},${height}`, ...extraArgs, "about:blank",
   ];
   const child = spawnImpl(executable, args, { stdio: ["ignore", "ignore", "pipe", "pipe", "pipe"], windowsHide: true });
   const stderrLines = [];

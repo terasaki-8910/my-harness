@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>shots fixture</title>
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#fff}canvas{display:block;width:100vw;height:100vh}</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<script>
+const canvas = document.getElementById("view");
+const ctx = canvas.getContext("2d");
+let ready = false;
+
+const scenes = {
+  red(w, h) {
+    ctx.fillStyle = "#c0152a";
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = "#ffffff";
+    const side = Math.round(h / 3);
+    ctx.fillRect(Math.round((w - side) / 2), Math.round((h - side) / 2), side, side);
+  },
+  grad(w, h) {
+    const gradient = ctx.createLinearGradient(0, 0, w, 0);
+    gradient.addColorStop(0, "#101830");
+    gradient.addColorStop(1, "#f0c060");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, w, h);
+  },
+  blank(w, h) {
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, w, h);
+  },
+};
+
+window.__shots = {
+  ready: () => ready,
+  list: () => ["red", { id: "grad", label: "Horizontal gradient" }, { id: "blank", label: "Pure white" }],
+  async show(id) {
+    const scale = window.devicePixelRatio || 1;
+    canvas.width = Math.round(innerWidth * scale);
+    canvas.height = Math.round(innerHeight * scale);
+    scenes[id](canvas.width, canvas.height);
+  },
+};
+
+setTimeout(() => { ready = true; }, 300);
+</script>
+</body>
+</html>
