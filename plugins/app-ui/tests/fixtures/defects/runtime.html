@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Planted: console, request, image</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="http://127.0.0.1:9/x.css">
+</head>
+<body>
+  <header class="app-header">
+    <h1>今日のパン</h1>
+    <p class="sub">この画面には、読み込めないものが3つ仕込んである</p>
+  </header>
+  <main>
+    <img src="missing-image.png" alt="焼きたてのパン" width="120" height="80">
+    <p class="lead">スタイルシートは届かず、画像は見つからず、コンソールにはエラーが出る。</p>
+  </main>
+  <script>
+    console.error("planted console error");
+    setTimeout(function () { throw new Error("planted uncaught exception"); }, 50);
+  </script>
+</body>
+</html>

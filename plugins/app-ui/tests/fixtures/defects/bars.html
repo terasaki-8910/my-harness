@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Planted: fixed-cover, safe-area</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    /* No bottom padding on purpose: the last paragraph ends under the bar. */
+    main { padding-bottom: 0; }
+    .top-button { position: absolute; top: 0; left: 16px; width: 120px; min-height: 48px; display: flex; align-items: center; justify-content: center; background: #F2F2F2; border-radius: 12px; }
+    .bottom-bar { position: fixed; left: 0; right: 0; bottom: 0; height: 64px; display: flex; background: #FFFFFF; border-top: 1px solid #D9D9D9; }
+    .bottom-bar a { flex: 1; display: flex; align-items: center; justify-content: center; }
+  </style>
+</head>
+<body>
+  <a class="top-button" href="home.html">戻る</a>
+  <header class="app-header">
+    <h1>今日のパン</h1>
+  </header>
+  <main>
+    <div style="height: 1200px;"></div>
+    <p class="lead" id="last">最後の項目は、固定の下バーの下に隠れる</p>
+  </main>
+  <div class="bottom-bar">
+    <a href="home.html">ホーム</a>
+    <a href="#">履歴</a>
+  </div>
+</body>
+</html>

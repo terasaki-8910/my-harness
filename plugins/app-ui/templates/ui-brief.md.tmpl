@@ -1,0 +1,61 @@
+# UI brief: <app name>
+
+Status: draft (change to "approved <date> by <person>" only when the person says so)
+Platform: iOS | Android (pick one and follow its conventions)
+Device for checks: 390x844 (iOS) | 412x915 (Android)
+
+## Job
+
+- Who: <one concrete person: situation, what they use today>
+- Scene: <where and when they open the app; one hand or two; how much time they have>
+- Goal: <what they want done, in one sentence>
+- Unmet need: <what today's apps miss for this person>
+- Twist: <the one idea that makes this app yours; it must be visible in the demo>
+
+## Main flow (3 to 5 screens)
+
+| # | Screen | Question it answers | The one primary action | What the person sees after it |
+| --- | --- | --- | --- | --- |
+| 1 | | | | |
+| 2 | | | | |
+| 3 | | | | |
+
+States the demo needs (empty, loading, error, done): <list, or "none">
+
+## Content
+
+Real sample content for every screen: names, places, numbers, dates, and the longest realistic text (a long name, a two-line title). No placeholder names, lorem ipsum or "Item 1".
+
+## References (2 or 3 apps)
+
+| App | Take | Do not take |
+| --- | --- | --- |
+| | | |
+
+## Direction
+
+- Tone: <three words>
+- Color: neutrals <values>; one accent <value>, used only for <the primary action and selection>; status colors <values>. Why: <one line>
+- Type: <family for Japanese and Latin text>; sizes <scale>. Why: <one line>
+- Shape and depth: radius <scale>; elevation <none, or what>
+- Spacing: base unit <4 or 8>; screen margin <16 or 20>
+- Motion: <what moves, at most 300 ms, ease-out>
+- Platform conventions kept: <iOS: tab bar, navigation bar, sheets | Android: top app bar, navigation bar, FAB>
+
+## Banned looks
+
+<The banned looks from the person's UI rules (for example ~/.claude/rules/ui.md), plus anything specific to this app.>
+
+## Demo storyboard (20 to 30 s)
+
+| Time | Screen | Action | What the viewer understands |
+| --- | --- | --- | --- |
+| 0-5 s | 1 | | what the app is for |
+| | | | |
+| -30 s | | | the result |
+
+## Acceptance
+
+- `check.mjs` on the exported screens: no FAIL; each WARN fixed, or kept with the reason written here.
+- impeccable URL scan: each finding fixed, or kept with the reason written here.
+- The person approves the flow sheet from `shots.mjs`.

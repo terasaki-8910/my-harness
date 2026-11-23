@@ -1,0 +1,140 @@
+---
+version: alpha
+name: "<App name>"
+description: "<One line: who it is for and how it should feel.>"
+colors:
+  # REPLACE primary with the one accent from the brief. Keep the neutrals pure grey.
+  primary: "#4D4D4D"
+  on-primary: "#FFFFFF"
+  surface: "#FFFFFF"
+  surface-container: "#F2F2F2"
+  outline: "#D9D9D9"
+  on-surface: "#1F1F1F"
+  on-surface-variant: "#5F5F5F"
+  error: "#B3261E"
+typography:
+  headline-lg:
+    fontFamily: Noto Sans JP
+    fontSize: 28px
+    fontWeight: 700
+    lineHeight: 1.3
+  headline-md:
+    fontFamily: Noto Sans JP
+    fontSize: 22px
+    fontWeight: 700
+    lineHeight: 1.35
+  body-lg:
+    fontFamily: Noto Sans JP
+    fontSize: 17px
+    fontWeight: 400
+    lineHeight: 1.6
+  body-md:
+    fontFamily: Noto Sans JP
+    fontSize: 15px
+    fontWeight: 400
+    lineHeight: 1.6
+  label-lg:
+    fontFamily: Noto Sans JP
+    fontSize: 15px
+    fontWeight: 600
+    lineHeight: 1.3
+  label-md:
+    fontFamily: Noto Sans JP
+    fontSize: 13px
+    fontWeight: 500
+    lineHeight: 1.4
+  label-sm:
+    fontFamily: Noto Sans JP
+    fontSize: 11px
+    fontWeight: 500
+    lineHeight: 1.3
+rounded:
+  none: 0px
+  sm: 8px
+  md: 12px
+  full: 9999px
+spacing:
+  xs: 4px
+  sm: 8px
+  md: 16px
+  lg: 24px
+  xl: 32px
+components:
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.on-primary}"
+    typography: "{typography.label-lg}"
+    rounded: "{rounded.md}"
+    height: 48px
+  button-secondary:
+    backgroundColor: "{colors.surface-container}"
+    textColor: "{colors.on-surface}"
+    typography: "{typography.label-lg}"
+    rounded: "{rounded.md}"
+    height: 48px
+  list-item:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.on-surface}"
+    typography: "{typography.body-lg}"
+    height: 56px
+  supporting-text:
+    textColor: "{colors.on-surface-variant}"
+    typography: "{typography.label-md}"
+  divider:
+    backgroundColor: "{colors.outline}"
+    height: 1px
+  error-text:
+    textColor: "{colors.error}"
+    typography: "{typography.label-md}"
+  navigation-bar:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.on-surface-variant}"
+    typography: "{typography.label-sm}"
+---
+
+# <App name>
+
+## Overview
+
+<Who uses the app, in which scene, and for what. The tone in three words. What the screens must make obvious at a glance. Write this from the brief's Job and Direction.>
+
+## Colors
+
+Neutrals carry the layout; the single accent marks what the person can do next.
+
+- **Primary:** the one accent. Only for the primary action of a screen and for the selected state.
+- **Surface / Surface container:** the screen background and grouped areas such as rows and inputs.
+- **On surface / On surface variant:** main text and icons; secondary text.
+- **Outline:** dividers and input borders.
+- **Error:** errors only.
+
+## Typography
+
+<Family and why. Sizes follow the scale above; do not add sizes between steps.>
+
+## Layout
+
+Phone layout with a 16px screen margin on a 4px spacing scale. Content starts below the status bar, and the last item scrolls clear of the bottom bar and the home indicator. <Add grouping rules from the brief.>
+
+## Elevation & Depth
+
+<Flat, or the one elevation level used and where. Prefer contrast and spacing over shadows.>
+
+## Shapes
+
+<Which radius goes where: buttons and inputs md, sheets and cards md, chips and avatars full.>
+
+## Components
+
+<For each component the flow needs (list rows, buttons, inputs, tab or navigation bar, sheets): its states and when it is used.>
+
+## Do's and Don'ts
+
+- Do give each screen one primary action, in the primary color; everything else is secondary or plain text.
+- Do make every tap target at least 44x44 pt on iOS or 48x48 dp on Android.
+- Do keep text contrast at WCAG AA: 4.5:1 for body text, 3:1 for large text.
+- Do use real content from the brief: real names, places, numbers and dates.
+- Do follow the platform's navigation conventions.
+- Don't use gradients, glass or blur effects, or emoji in headings and buttons.
+- Don't add colors, font sizes or corner radii that are not defined above.
+- <Add the brief's banned looks.>

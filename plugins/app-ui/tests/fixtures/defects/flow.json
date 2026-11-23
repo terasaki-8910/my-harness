@@ -1,0 +1,14 @@
+{
+  "device": "ios",
+  "designMd": "DESIGN.md",
+  "screens": [
+    { "id": "runtime", "file": "runtime.html", "label": "console, request, image", "next": "overflow" },
+    { "id": "overflow", "file": "overflow.html", "label": "overflow", "next": "viewport-meta" },
+    { "id": "viewport-meta", "file": "viewport-meta.html", "label": "viewport-meta", "next": "tap" },
+    { "id": "tap", "file": "tap.html", "label": "tap", "tapText": "存在しないボタン", "next": "targets" },
+    { "id": "targets", "file": "targets.html", "label": "target, text-size, contrast, token-size", "next": "bars" },
+    { "id": "bars", "file": "bars.html", "label": "fixed-cover, safe-area", "next": "style" },
+    { "id": "style", "file": "style.html", "label": "primary, token-color, token-font, token-radius", "next": "content" },
+    { "id": "content", "file": "content.html", "label": "placeholder, emoji, contrast-unknown" }
+  ]
+}

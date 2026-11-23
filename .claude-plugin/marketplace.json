@@ -23,6 +23,11 @@
       "name": "game3d",
       "source": "./plugins/game3d",
       "description": "3D game art pipeline: headless Blender runs, GLB budget and asset licence audits, fixed-camera shots with blank-frame checks."
+    },
+    {
+      "name": "app-ui",
+      "source": "./plugins/app-ui",
+      "description": "Phone app UI from a brief: DESIGN.md, Stitch prompts, phone-viewport checks, flow sheets."
     }
   ]
 }
