@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>パンセットの予約</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="app-header">
+    <a class="icon-btn" href="home.html" aria-label="戻る">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+    </a>
+    <h1>朝のパンセット</h1>
+    <p class="sub">明日の朝 7:30 から受け取れます</p>
+  </header>
+  <main>
+    <p class="lead">塩バターロール2つと、全粒粉のバゲット半分。焼きたてを紙袋に入れてお渡しします。</p>
+    <section class="card">
+      <h2>受け取りの時間</h2>
+      <p class="sub">駅前店のカウンターで、名前をお伝えください</p>
+      <div class="chips">
+        <button class="chip" type="button">7:30</button>
+        <button class="chip is-selected" type="button" aria-pressed="true">8:00</button>
+        <button class="chip" type="button">8:30</button>
+      </div>
+    </section>
+    <section class="card">
+      <h2>お会計</h2>
+      <ul class="lines">
+        <li><span>塩バターロール × 2</span><span class="row-price">¥320</span></li>
+        <li><span>全粒粉のバゲット 半分</span><span class="row-price">¥190</span></li>
+        <li><span>紙袋</span><span class="row-price">¥10</span></li>
+        <li><span>合計</span><span class="row-price">¥520</span></li>
+      </ul>
+    </section>
+    <a class="btn-primary" href="done.html">予約を確定する</a>
+  </main>
+  <nav class="tabbar" aria-label="メインメニュー">
+    <a class="tab" aria-current="page" href="home.html">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+      <span>ホーム</span>
+    </a>
+    <a class="tab" href="#">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      <span>履歴</span>
+    </a>
+    <a class="tab" href="#">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg>
+      <span>設定</span>
+    </a>
+  </nav>
+</body>
+</html>

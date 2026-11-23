@@ -1,0 +1,8 @@
+{
+  "name": "app-ui",
+  "version": "0.1.0",
+  "description": "Phone app UI from a brief: DESIGN.md, Stitch prompts, phone-viewport checks, flow sheets.",
+  "author": {
+    "name": "terasaki-8910"
+  }
+}

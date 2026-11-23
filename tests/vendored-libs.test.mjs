@@ -20,3 +20,17 @@ test("game3d browser libraries are byte-for-byte copies of video originals", () 
     assert.deepEqual(fs.readFileSync(path.join(game3d, name)), fs.readFileSync(path.join(video, name)), name);
   }
 });
+
+const appUi = path.join(repositoryRoot, "plugins", "app-ui", "skills", "app-ui", "scripts", "lib");
+
+test("app-ui browser libraries are byte-for-byte copies of video originals", () => {
+  for (const name of ["chrome.mjs", "cdp.mjs", "server.mjs"]) {
+    assert.deepEqual(fs.readFileSync(path.join(appUi, name)), fs.readFileSync(path.join(video, name)), name);
+  }
+});
+
+test("app-ui png and frames libraries are byte-for-byte copies of game3d originals", () => {
+  for (const name of ["png.mjs", "frames.mjs"]) {
+    assert.deepEqual(fs.readFileSync(path.join(appUi, name)), fs.readFileSync(path.join(game3d, name)), name);
+  }
+});

@@ -1,0 +1,9 @@
+{
+  "device": "ios",
+  "designMd": "DESIGN.md",
+  "screens": [
+    { "id": "home", "file": "home.html", "label": "1 今日のパン", "tapText": "セットを予約する", "next": "detail" },
+    { "id": "detail", "file": "detail.html", "label": "2 パンセットの予約", "tap": ".btn-primary", "next": "done" },
+    { "id": "done", "file": "done.html", "label": "3 予約完了" }
+  ]
+}
