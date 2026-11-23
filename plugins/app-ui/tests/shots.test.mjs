@@ -114,6 +114,31 @@ describe("shots.mjs on the clean flow", { skip }, () => {
 });
 
 describe("shots.mjs edge cases", { skip }, () => {
+  it("passes sparse but finished screens and flags a lone spinner (flat limit 0.97, not game3d's 0.9)", async () => {
+    const css = "<style>body{margin:0;font-family:sans-serif;color:#1f1f1f;background:#fff}main{padding:80px 16px 40px}h1{font-size:28px;margin:0 0 24px}input{display:block;width:100%;box-sizing:border-box;height:48px;border:1px solid #d9d9d9;border-radius:12px;margin:0 0 16px}.btn{display:block;width:100%;height:48px;border:0;border-radius:12px;background:#0b7a75;color:#fff;font-size:15px}p{text-align:center;color:#5f5f5f;font-size:15px}</style>";
+    const page = (body) => `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="data:,">${css}</head><body>${body}</body></html>`;
+    const site = makeSite({
+      "signin.html": page('<main><h1>ログイン</h1><input aria-label="メールアドレス"><input type="password" aria-label="パスワード"><button class="btn">ログインする</button><p>パスワードを忘れた場合</p></main>'),
+      "confirm.html": page('<main style="text-align:center;padding-top:160px"><svg width="80" height="80" viewBox="0 0 80 80"><circle cx="40" cy="40" r="36" fill="none" stroke="#0b7a75" stroke-width="5"/><path d="M24 41l11 11 21-23" fill="none" stroke="#0b7a75" stroke-width="5"/></svg><h1>予約しました</h1><p>明日の 8:00 に、駅前店のカウンターでお受け取りください。</p><button class="btn">ホームへ戻る</button></main>'),
+      "spinner.html": page('<div style="position:fixed;left:175px;top:402px;width:32px;height:32px;border:4px solid #d9d9d9;border-top-color:#0b7a75;border-radius:50%"></div>'),
+      "flow.json": { screens: ["signin", "confirm", "spinner"].map((id) => ({ id, label: id, file: `${id}.html` })) },
+    });
+    const out = path.join(site, "out");
+    try {
+      const result = await run("shots.mjs", [path.join(site, "flow.json"), "--out", out]);
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      const report = JSON.parse(fs.readFileSync(path.join(out, "shots.json"), "utf8"));
+      const byId = Object.fromEntries(report.screens.map((screen) => [screen.id, screen]));
+      for (const id of ["signin", "confirm"]) {
+        assert.equal(byId[id].blank, null, `${id}: ${JSON.stringify(byId[id].stats)}`);
+        assert.ok(byId[id].stats.mode > 0.9, `${id} would be flat at 0.9: ${JSON.stringify(byId[id].stats)}`);
+      }
+      assert.equal(byId.spinner.blank, "white");
+    } finally {
+      fs.rmSync(site, { recursive: true, force: true });
+    }
+  });
+
   it("scrolls a tap target below the fold into view and records the scroll position", async () => {
     const site = makeSite({
       "tall.html": PAGE('<div style="height:1500px"></div><button id="go" style="width:200px;height:48px">Go</button><div style="height:600px"></div>'),
