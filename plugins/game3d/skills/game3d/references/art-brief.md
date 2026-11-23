@@ -32,7 +32,13 @@ Bevel widths, trim and cornice profiles, column and railing language, how often 
 
 ## Camera and shots
 
-Field of view, typical distance, and the fixed review shots: id and what each must show. These are the shots `shots.mjs` captures.
+Field of view, typical distance, and the fixed review shots: id and what each must show. These are the shots `shots.mjs` captures. Say which shots players see most (the follow camera) and which are inspection angles, so reviews weigh them correctly.
+
+Backdrops folded or curved around the play area (FOLD / CITY, 2026-11-24):
+- A city surface that faces the main camera head-on reads as a map, however detailed: roofs, streets and dots of trees seen from above. A wall of city straight ahead of the play camera did this.
+- Curl the surface across the main camera's view axis, so its walls run alongside the view and show facades at grazing angles. Example: a canyon, then walls creased at right angles, then a tube.
+- Measure it with a debug view that paints the backdrop by the angle between view ray and surface normal. The roof-on share fell from 20-23 % to 0 % in the play shots.
+- Views turned sideways still see a wall square-on. Show such views to the owner as a known trade-off.
 
 ## Banned looks
 
