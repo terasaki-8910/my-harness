@@ -6,7 +6,7 @@
 
 - Node.js 20 or later.
 - Google Chrome or Chromium. Set `CHROME_PATH` to override discovery.
-- No network: screens are served from the flow.json folder over `http://127.0.0.1`. A screen that loads remote assets needs network, and the remote origins are listed under `origins`.
+- No network for local screens: they are served from the flow.json folder over `http://127.0.0.1`. A screen that loads remote assets needs network, and the remote origins are listed under `origins`.
 
 ## Install
 
@@ -152,7 +152,7 @@ NEEDS HUMAN, printed at the end of every run: the first screen says what the app
 <out>/shots.json             { device, width, height, dpr, screens: [{ id, label, png, full, tap, scrollY, blank }] }
 ```
 
-`shots.json` also carries `stats` (the blank-frame numbers) and `errors` for each screen. Each PNG is decoded and tested with the blank-frame check of game3d (white, black, uniform or flat). The sheet shows the tiles in flow order, at most 5 per row, each with `label (id)` above it; the tap rect has a 2 px accent ring 2 px outside it; an arrow joins two tiles when `next` names the following screen (a flow that wraps to a second row says `next: <id>` under the last tile instead). Its header has the flow file name, the device, the size and the date. The page defines one grey scale and one accent as CSS custom properties and uses no other colour. Read the sheet before accepting a design.
+`shots.json` also carries `stats` (the blank-frame numbers) and `errors` for each screen. Each PNG is decoded and tested with the blank-frame check of game3d (white, black, uniform or flat), with the flat limit raised to 97 percent for app screens. The sheet shows the tiles in flow order, at most 5 per row, each with `label (id)` above it; the tap rect has a 2 px accent ring 2 px outside it; an arrow joins two tiles when `next` names the following screen (a flow that wraps to a second row says `next: <id>` under the last tile instead). Its header has the flow file name, the device, the size and the date. The page defines one grey scale and one accent as CSS custom properties and uses no other colour. Read the sheet before accepting a design.
 
 ## DESIGN.md subset
 
@@ -162,9 +162,9 @@ NEEDS HUMAN, printed at the end of every run: the first screen says what the app
 
 - Stitch's export layout is not confirmed, and neither is whether its HTML loads the Tailwind CDN, Google Fonts or remote images. Point `file` at each screen's HTML; remote requests need network and are listed under `origins`.
 - The `primary`, `safe-area` and `fixed-cover` rules are heuristics. `safe-area` and `fixed-cover` see only content that scrolls with the window: a screen built as a full-height container with its own inner scroll is measured as it is first drawn.
-- `overflow` compares the scroll width with the layout viewport width (`clientWidth` of the scrolling element), not `window.innerWidth`: a mobile-emulated page wider than the screen is zoomed out and reports a larger `innerWidth`, which would hide the overflow. Put a page you want checked for overflow on its own screen, because the zoom also shifts every other geometry reading on it.
+- `overflow` compares the scroll width with the layout viewport width (`clientWidth` of the scrolling element), not `window.innerWidth`: a mobile-emulated page wider than the screen is zoomed out and reports a larger `innerWidth`, which would hide the overflow. The zoom also shifts the other geometry readings on that screen (targets, bars, safe areas), so fix the overflow first and check again.
 - `target` exempts an `a` element only when it is `display: inline` and its nearest block-level ancestor also holds text outside any link or button (a link inside a sentence). Links in a flex navigation bar are not exempt.
 - "Visible" is the plain definition (a rectangle wider and taller than 0, `visibility: visible`, `display` not `none`, opacity above 0 up the tree). An element parked off-screen, such as a drawer at `translateX(-100%)` or a skip link at `-9999px`, therefore counts: it can raise `target` or `text-size`, and its text goes to `info contrast-unknown` because it cannot be sampled.
 - The background behind a text is read from `document.elementsFromPoint` at the text's centre, after scrolling that point into the viewport. Text inside an inner scroll container, text outside the viewport horizontally, and text over an image or gradient are not measured and are counted under `info contrast-unknown`; an overlay that has `pointer-events: none` is not in the element stack and is ignored.
-- The blank-frame check can call a sparse, mostly white screen "flat" (90 percent of samples within 2 luminance levels of one level).
+- The blank-frame check calls a screen "flat" when 97 percent of its samples sit within 2 luminance levels of one level (game3d uses 90 percent; that flagged sparse but finished screens). A nearly empty screen, such as a splash with only a small logo, can still be flagged.
 - Only Windows 11 with Chrome 158 was run. The macOS and Linux paths are unrun; the Chrome discovery is the video plugin's.

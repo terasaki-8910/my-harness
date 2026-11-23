@@ -14,7 +14,7 @@
 // every screen in a row of at most 5 with "label (id)" above it, the tap target outlined, an arrow where "next" names
 // the following screen) and <out>/shots.json { device, width, height, dpr, screens: [{ id, label, png, full, tap,
 // scrollY, blank }] } (plus "errors" and "stats" per screen). Each PNG is decoded and tested with the blank-frame
-// check of frames.mjs (white, black, uniform or flat); a sparse mostly-white screen can be reported as flat.
+// check of frames.mjs (white, black, uniform, or flat at 97 percent of samples on one level).
 // Prints one line per screen and the path of sheet.png.
 // Exit 0: every shot has content and no screen logged a page error (console error, uncaught exception, failed request,
 // load failure). Exit 1: a blank shot or a page error; the files are still written and the errors are listed.
@@ -32,6 +32,9 @@ import { sheetHtml } from "./lib/sheet.mjs";
 
 const PAGE_ERROR_CODES = new Set(["load", "console", "request"]);
 const SHEET_SCALE = 2;
+// game3d's "flat" limit (0.9) flags a sparse but finished app screen (a confirmation, a sign-in); 0.97 still
+// flags a screen that drew only a bar or a spinner on an empty background.
+const BLANK_OPTIONS = { maxMode: 0.97 };
 const fixed = (value) => value.toFixed(3);
 
 async function scrollTapIntoView(browser, opened, collected) {
@@ -102,7 +105,7 @@ async function main() {
           entry.png = `${number}-${screen.id}.png`;
           fs.writeFileSync(path.join(out, entry.png), png);
           entry.stats = frameStats(decodePng(png));
-          entry.blank = blankReason(entry.stats);
+          entry.blank = blankReason(entry.stats, BLANK_OPTIONS);
           tile.src = `data:image/png;base64,${png.toString("base64")}`;
           tile.blank = entry.blank;
           const rect = collected.tap?.rect;
