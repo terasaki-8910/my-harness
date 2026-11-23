@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>perf event fixture</title>
+</head>
+<body>
+<p>Idle until window.__stutter() is called.</p>
+<script>
+// A page that is smooth until something runs for the first time: __stutter(frames, ms) blocks the main thread
+// for `ms` in each of `frames` consecutive animation frames, the first one at once (inside whatever called it).
+function block(ms) {
+  const until = performance.now() + ms;
+  while (performance.now() < until) { /* busy wait */ }
+}
+
+window.__stutter = (frames = 6, ms = 100) => {
+  let left = frames;
+  const step = () => {
+    block(ms);
+    left -= 1;
+    if (left > 0) requestAnimationFrame(step);
+  };
+  step();
+};
+</script>
+</body>
+</html>

@@ -35,4 +35,5 @@ node <base>/scripts/asset-audit.mjs . --manifest docs/asset-manifest.json
 node <base>/scripts/shots.mjs "http://localhost:4173/?shots=1" --out artifacts/shots/after
 node <base>/scripts/sheet.mjs --before artifacts/shots/before --after artifacts/shots/after --out artifacts/shots/compare.png
 node <base>/scripts/perf.mjs "http://localhost:4173/" --headed --seconds 20 --p95 17.5
+node <base>/scripts/perf.mjs "http://localhost:4173/?debug=1" --headed --warmup 15 --seconds 8 --event "window.__debug.transition()" --p95 17.5
 ```
