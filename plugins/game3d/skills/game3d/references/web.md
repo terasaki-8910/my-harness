@@ -21,6 +21,9 @@
 
 - On a 60 Hz display with vsync, requestAnimationFrame intervals sit at 16.7 ms with a little jitter, so p95 reads 16.7-16.8 ms even for an idle page. A budget of "p95 <= 16.7 ms" can never pass reliably; use 17.5 ms for "holds 60 fps" and watch p99 and max for dropped frames (FOLD / CITY, 2026-11-23: 16.8 ms before and after the change).
 - Always measure the untouched build the same way first; the difference is the cost of the change.
+- Measure a one-off event (a transition, a level change, the first use of an effect) the first time it happens after the page has sat idle. Trigger it through the page's debug API while recording, and judge only that window. A looped benchmark after a long warm-up hides a stutter from code running for the first time.
+  - Example, FOLD / CITY, 2026-11-23: the first fold after 15 s at rest had p95 33.3 ms, with about 25 frames of 33-67 ms in its first 1.2 s.
+  - The second fold in the same session had p95 16.8 ms. The looped fold passed only after an 8-15 s warm-up.
 
 ## Light from an HDRI
 
