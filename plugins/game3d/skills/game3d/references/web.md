@@ -24,6 +24,7 @@
 - Measure a one-off event (a transition, a level change, the first use of an effect) the first time it happens after the page has sat idle. Trigger it through the page's debug API while recording, and judge only that window. A looped benchmark after a long warm-up hides a stutter from code running for the first time.
   - Example, FOLD / CITY, 2026-11-23: the first fold after 15 s at rest had p95 33.3 ms, with about 25 frames of 33-67 ms in its first 1.2 s.
   - The second fold in the same session had p95 16.8 ms. The looped fold passed only after an 8-15 s warm-up.
+  - `perf.mjs --event "<debug call>" --warmup 15` measures that window.
 
 ## Light from an HDRI
 

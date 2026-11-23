@@ -408,6 +408,64 @@ describe("shots.mjs, sheet.mjs and perf.mjs in headless Chrome", { skip: chromeM
     const within = await run("perf.mjs", [`${base}/index.html`, "--seconds", "1", "--warmup", "0", "--size", "320x180", "--p95", "1000"]);
     assert.equal(within.status, 0, within.stderr);
     assert.equal((await run("perf.mjs", [`${base}/index.html`, "--seconds", "0"], 20_000)).status, 2);
+    assert.doesNotMatch(result.stdout, /^event/m, "without --event the output has no event block");
+    assert.doesNotMatch(over.stdout, /^event/m);
+  });
+
+  // Fixture: smooth until window.__stutter(frames, ms) blocks the main thread for `ms` in each of `frames` frames.
+  // Only assertions that machine load cannot break: the stall is real, so frames of at least 90 ms must be there;
+  // nothing here asserts that an idle frame is fast.
+  const stutterArgs = (...rest) => [`${base}/perf-event.html`, "--warmup", "0.5", "--size", "320x180", ...rest];
+
+  it("perf.mjs --event reports the frames after a one-off event, counted from the event, and --p95 judges that window", async () => {
+    const result = await run("perf.mjs", stutterArgs("--seconds", "5", "--event", "window.__stutter(6, 100)", "--event-at", "1", "--event-window", "1", "--p95", "50"));
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    const lines = "(\\d+\\.\\d) ms";
+    assert.match(result.stdout, new RegExp(`^frames: (\\d+)\\np50: ${lines}\\np95: ${lines}\\np99: ${lines}\\nmax: ${lines}\\nrenderer: .+\\n` +
+      `event: ran (\\d\\.\\d\\d) s into the recording, judged for the next 1 s\\nevent frames: (\\d+)\\nevent p50: ${lines}\\nevent p95: ${lines}\\nevent p99: ${lines}\\nevent max: ${lines}\\n` +
+      "event frames over 34 ms: (\\d+)\\nevent slowest: (.+)\\n"));
+    const field = (name) => Number(new RegExp(`^${name}: (\\d+(?:\\.\\d+)?)`, "m").exec(result.stdout)[1]);
+    const ran = Number(/^event: ran (\d\.\d\d) s/m.exec(result.stdout)[1]);
+    assert.ok(ran >= 1 && ran < 1.5, `the event ran ${ran} s into the recording (asked for 1)`);
+    assert.ok(field("event frames") >= 6 && field("event frames") < field("frames"), "the window holds the six stalled frames and is smaller than the recording");
+    assert.ok(field("event frames over 34 ms") >= 6, "all six stalled frames are counted in the window");
+    assert.ok(field("event p95") >= 90 && field("event max") >= 90, "the stall shows in the window's p95 and max");
+    assert.ok(field("p95") < field("event p95"), "six stalled frames of about 270 do not move the whole recording's p95");
+    const slowest = [...result.stdout.match(/^event slowest: (.+)$/m)[1].matchAll(/\+(\d\.\d\d)s (\d+\.\d) ms/g)].map((match) => ({ time: Number(match[1]), interval: Number(match[2]) }));
+    assert.equal(slowest.length, 5);
+    for (const frame of slowest) {
+      assert.ok(frame.interval >= 90, `slowest frame ${frame.interval} ms`);
+      // Counted from the event: the stall lies in the first 0.7 s after it. Counted from the recording start (1 s earlier) these would read 1.1 s or more.
+      assert.ok(frame.time > 0 && frame.time <= 1, `at +${frame.time}s`);
+    }
+    assert.match(result.stdout, /^FAIL event window p95 \d+\.\d ms is above the 50\.0 ms budget$/m);
+    assert.doesNotMatch(result.stdout, /^FAIL p95/m);
+    assert.ok(result.stdout.indexOf("event: ran") > result.stdout.indexOf("renderer:"), "the event block follows the whole-recording lines");
+  });
+
+  it("perf.mjs --event with a harmless event passes a lenient window budget, and --event-at and --event-window default", async () => {
+    const result = await run("perf.mjs", stutterArgs("--seconds", "5", "--event", "0", "--p95", "5000"));
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /^event: ran \d\.\d\d s into the recording, judged for the next 4 s$/m);
+    assert.match(result.stdout, /^PASS event window p95 \d+\.\d ms is within the 5000\.0 ms budget$/m);
+    assert.ok(Number(/^event frames: (\d+)/m.exec(result.stdout)[1]) > 20);
+  });
+
+  it("perf.mjs --event that throws prints FAIL event threw with the message, no statistics, and exits 1", async () => {
+    const result = await run("perf.mjs", stutterArgs("--seconds", "5", "--event", "throw new Error('boom \"quoted\" `tick`')", "--p95", "5000"));
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stdout, /^FAIL event threw: boom "quoted" `tick`$/m);
+    assert.doesNotMatch(result.stdout, /^(frames|event|PASS|FAIL p95)/m);
+    const missing = await run("perf.mjs", stutterArgs("--seconds", "5", "--event", "window.__nothing.start()"));
+    assert.equal(missing.status, 1, missing.stdout + missing.stderr);
+    assert.match(missing.stdout, /^FAIL event threw: .*undefined/m);
+  });
+
+  it("perf.mjs --event with a syntax error is a setup error", async () => {
+    const result = await run("perf.mjs", stutterArgs("--seconds", "2", "--event", "window.__stutter(", "--event-window", "1"));
+    assert.equal(result.status, 2, result.stdout + result.stderr);
+    assert.match(result.stderr, /^perf: SyntaxError/);
+    assert.equal(result.stdout, "");
   });
 
   it("a missing texture and a failed fetch are page errors listed with URL and status; favicon.ico is not", async () => {
