@@ -32,8 +32,9 @@ import { sheetHtml } from "./lib/sheet.mjs";
 
 const PAGE_ERROR_CODES = new Set(["load", "console", "request"]);
 const SHEET_SCALE = 2;
-// game3d's "flat" limit (0.9) flags a sparse but finished app screen (a confirmation, a sign-in); 0.97 still
-// flags a screen that drew only a bar or a spinner on an empty background.
+// game3d's "flat" limit (0.9) flags sparse but finished app screens: a sign-in and a confirmation measured mode
+// 0.936 and 0.934 (iOS, dpr 2, 2026-11-23). A screen with only a 64 px top bar measured 0.925, so mode cannot tell
+// it from them; it passes, and the sheet must show it. A lone spinner is still caught (white 0.999).
 const BLANK_OPTIONS = { maxMode: 0.97 };
 const fixed = (value) => value.toFixed(3);
 
