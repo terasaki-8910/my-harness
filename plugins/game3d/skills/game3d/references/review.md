@@ -27,6 +27,14 @@ Closing the loop (FOLD / CITY background, 2026-11-24: four fresh reviews, all FA
 - For the final round, hand the reviewer every earlier finding and ask fixed, partly fixed, not fixed or regressed for each, then the few new problems and a ship or no-ship call.
 - State the camera roles accurately in the prompt: which shots players see most (the follow camera), and which are inspection angles. A prompt that called a sideways inspection angle "seen most" inflated one finding for three rounds.
 
+Writing numeric targets (FOLD / CITY background, 2026-11-24):
+- Give every target both bounds. A one-sided target gets overshot:
+  - "slate b* below 0" alone gave cornflower-blue roofs (C* 10-11) that passed it, and a toy-kit look. A chroma cap of 7 fixed it.
+  - "city detail below the walkway's" turned a busy city into flat boxes. "At least 0.55 of it" turned flat boxes into a busy city. A band between them held.
+- Measure regions as well as the whole frame. Whole-frame medians passed while the shade walls were a flat murky band and the sun walls were twice as busy as the walkway. A per-wall script (fixed regions, detail ratio, sd, colour split) found both.
+- A target can also block the owner's taste. When the owner asked for stronger windows and weathering, the busy-detail ceiling was raised on their word, and the owner checked the result by eye.
+- Most "procedural kit" findings were not about numbers. They meant one untextured module repeated at a fixed rhythm. What fixed it was a change of method: textured, weathered units built as rows of houses that each differ (tint, eaves, roof form, dormer rhythm), with shared tiled CC0 textures in one array (5.6 MB, one draw call), and each lot taking the unit closest to its size. No number had flagged it.
+
 How to review well:
 - Read the brief and the references before the shots.
 - Assume there are problems and look for them; a shot that "looks fine" has not been reviewed yet.
